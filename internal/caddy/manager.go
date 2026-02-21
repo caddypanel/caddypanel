@@ -147,12 +147,18 @@ func (m *Manager) Start() error {
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, m.cfg.CaddyBin, "start", "--config", m.cfg.CaddyfilePath)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
+	// IMPORTANT: Do NOT use CombinedOutput() here!
+	// `caddy start` forks a background daemon (caddy run) that inherits
+	// stdout/stderr pipes. CombinedOutput() waits for pipe EOF, which
+	// never happens while the daemon is running → blocks forever.
+	// Using Run() with nil Stdout/Stderr avoids creating pipes entirely.
+	cmd.Stdout = nil
+	cmd.Stderr = nil
+	if err := cmd.Run(); err != nil {
 		if ctx.Err() == context.DeadlineExceeded {
 			return fmt.Errorf("caddy start timed out after 15s")
 		}
-		return fmt.Errorf("caddy start failed: %s\n%s", err, string(output))
+		return fmt.Errorf("caddy start failed: %v", err)
 	}
 	log.Println("Caddy started successfully")
 	return nil
