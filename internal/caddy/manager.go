@@ -79,6 +79,15 @@ func (m *Manager) WriteCaddyfile(content string) error {
 // Reload tells Caddy to reload its configuration
 func (m *Manager) Reload() error {
 	cmd := exec.Command(m.cfg.CaddyBin, "reload", "--config", m.cfg.CaddyfilePath)
+	
+	// Force Caddy to use our data dir for certificates, skipping user $HOME permissions
+	caddyDataDir := filepath.Join(filepath.Dir(m.cfg.CaddyfilePath), "caddy_data")
+	caddyConfigDir := filepath.Join(filepath.Dir(m.cfg.CaddyfilePath), "caddy_config")
+	cmd.Env = append(os.Environ(), 
+		"XDG_DATA_HOME="+caddyDataDir,
+		"XDG_CONFIG_HOME="+caddyConfigDir,
+	)
+
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("caddy reload failed: %s\n%s", err, string(output))
@@ -147,6 +156,15 @@ func (m *Manager) Start() error {
 	defer cancel()
 
 	cmd := exec.CommandContext(ctx, m.cfg.CaddyBin, "start", "--config", m.cfg.CaddyfilePath)
+	
+	// Force Caddy to use our data dir for certificates
+	caddyDataDir := filepath.Join(filepath.Dir(m.cfg.CaddyfilePath), "caddy_data")
+	caddyConfigDir := filepath.Join(filepath.Dir(m.cfg.CaddyfilePath), "caddy_config")
+	cmd.Env = append(os.Environ(), 
+		"XDG_DATA_HOME="+caddyDataDir,
+		"XDG_CONFIG_HOME="+caddyConfigDir,
+	)
+
 	// IMPORTANT: Do NOT use CombinedOutput() here!
 	// `caddy start` forks a background daemon (caddy run) that inherits
 	// stdout/stderr pipes. CombinedOutput() waits for pipe EOF, which
