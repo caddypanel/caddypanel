@@ -337,8 +337,8 @@ install_from_source() {
     # Build frontend
     info "Building frontend..."
     cd "$SRC_DIR/web"
-    npm install --loglevel=warn 2>&1 | tail -3
-    npm run build 2>&1 | tail -5
+    npm install --unsafe-perm --loglevel=warn 2>&1
+    npm run build 2>&1
     success "Frontend built"
 
     # Build backend
