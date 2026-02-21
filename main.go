@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/caddypanel/caddypanel/internal/auth"
 	"github.com/caddypanel/caddypanel/internal/caddy"
@@ -39,15 +40,19 @@ func main() {
 		log.Printf("⚠️  Failed to apply initial config: %v", err)
 	}
 
-	// Auto-start Caddy if not already running
-	if !caddyMgr.IsRunning() {
-		if err := caddyMgr.Start(); err != nil {
-			log.Printf("⚠️  Failed to auto-start Caddy: %v", err)
-			log.Println("   You can start it manually via the panel.")
-		} else {
-			log.Println("✅ Caddy started automatically")
+	// Auto-start Caddy in background (don't block HTTP server startup)
+	go func() {
+		// Small delay to let the HTTP server start first
+		time.Sleep(2 * time.Second)
+		if !caddyMgr.IsRunning() {
+			if err := caddyMgr.Start(); err != nil {
+				log.Printf("⚠️  Failed to auto-start Caddy: %v", err)
+				log.Println("   You can start it manually via the panel.")
+			} else {
+				log.Println("✅ Caddy started automatically")
+			}
 		}
-	}
+	}()
 
 	// Setup Gin
 	r := gin.Default()

@@ -26,6 +26,11 @@ func (h *CaddyHandler) Status(c *gin.Context) {
 // Start starts the Caddy process
 func (h *CaddyHandler) Start(c *gin.Context) {
 	if err := h.mgr.Start(); err != nil {
+		// If already running, treat as success (idempotent)
+		if h.mgr.IsRunning() {
+			c.JSON(http.StatusOK, gin.H{"message": "Caddy is already running"})
+			return
+		}
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
