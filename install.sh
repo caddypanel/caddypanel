@@ -400,7 +400,11 @@ install_nodejs() {
 
     [[ -z "$NODE_FULL_VER" ]] && fatal "Failed to fetch Node.js version"
 
-    local NODE_TAR="node-v${NODE_FULL_VER}-linux-${GO_ARCH}.tar.xz"
+    # Node.js uses "x64" not "amd64"
+    local NODE_ARCH="$GO_ARCH"
+    [[ "$NODE_ARCH" == "amd64" ]] && NODE_ARCH="x64"
+
+    local NODE_TAR="node-v${NODE_FULL_VER}-linux-${NODE_ARCH}.tar.xz"
     info "Downloading Node.js v${NODE_FULL_VER} ..."
     wget -q --show-progress -O "/tmp/${NODE_TAR}" "https://nodejs.org/dist/v${NODE_FULL_VER}/${NODE_TAR}"
     tar -C /usr/local --strip-components=1 -xJf "/tmp/${NODE_TAR}"
