@@ -1,6 +1,7 @@
 package caddy
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -142,9 +143,15 @@ func (m *Manager) Start() error {
 		}
 	}
 
-	cmd := exec.Command(m.cfg.CaddyBin, "start", "--config", m.cfg.CaddyfilePath)
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, m.cfg.CaddyBin, "start", "--config", m.cfg.CaddyfilePath)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			return fmt.Errorf("caddy start timed out after 15s")
+		}
 		return fmt.Errorf("caddy start failed: %s\n%s", err, string(output))
 	}
 	log.Println("Caddy started successfully")
