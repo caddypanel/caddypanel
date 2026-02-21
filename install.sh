@@ -2,6 +2,7 @@
 # ============================================================================
 #  CaddyPanel — One-Click Install Script
 #  Supports: Ubuntu 20+, Debian 11+, CentOS Stream 8+, AlmaLinux 8+, Fedora 38+
+#           openAnolis, Alibaba Cloud Linux, openEuler, openCloudOS, Kylin (银河麒麟)
 #
 #  Usage:
 #    curl -fsSL https://raw.githubusercontent.com/caddypanel/caddypanel/main/install.sh | bash
@@ -75,8 +76,30 @@ detect_os() {
         rocky|rockylinux)       OS_FAMILY="rhel" ;;
         fedora)                 OS_FAMILY="rhel" ;;
         rhel|redhat)            OS_FAMILY="rhel" ;;
+        # Chinese domestic distributions
+        anolis)                 OS_FAMILY="rhel" ;;  # openAnolis (Alibaba)
+        alinux)                 OS_FAMILY="rhel" ;;  # Alibaba Cloud Linux
+        openeuler|openEuler)    OS_FAMILY="rhel" ;;  # openEuler (Huawei)
+        opencloudos)            OS_FAMILY="rhel" ;;  # openCloudOS (Tencent)
+        kylin)
+            # Kylin Desktop is Ubuntu-based (apt), Kylin Server is CentOS-based (dnf/yum)
+            if command -v apt-get &>/dev/null && ! command -v dnf &>/dev/null; then
+                OS_FAMILY="debian"
+            else
+                OS_FAMILY="rhel"
+            fi
+            ;;  # Kylin 银河麒麟
         *)
-            fatal "Unsupported OS: $OS_NAME ($OS_ID). Supported: Ubuntu, Debian, CentOS Stream, AlmaLinux, Rocky Linux, Fedora"
+            # Last-resort auto-detection by package manager
+            if command -v apt-get &>/dev/null; then
+                warn "Unknown OS '$OS_ID', detected apt — treating as Debian-family"
+                OS_FAMILY="debian"
+            elif command -v dnf &>/dev/null || command -v yum &>/dev/null; then
+                warn "Unknown OS '$OS_ID', detected dnf/yum — treating as RHEL-family"
+                OS_FAMILY="rhel"
+            else
+                fatal "Unsupported OS: $OS_NAME ($OS_ID). Supported: Ubuntu, Debian, CentOS Stream, AlmaLinux, Rocky Linux, Fedora, openAnolis, Alibaba Cloud Linux, openEuler, openCloudOS, Kylin"
+            fi
             ;;
     esac
 
@@ -121,7 +144,9 @@ Options:
 
 Supported OS:
   Ubuntu 20.04+, Debian 11+, CentOS Stream 8+,
-  AlmaLinux 8+, Rocky Linux 8+, Fedora 38+
+  AlmaLinux 8+, Rocky Linux 8+, Fedora 38+,
+  openAnolis, Alibaba Cloud Linux, openEuler,
+  openCloudOS, Kylin (银河麒麟)
 EOF
 }
 
