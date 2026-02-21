@@ -158,7 +158,7 @@ jobs:
             -H "Authorization: Bearer $TOKEN" \
             -H 'Content-Type: application/json' \
             -d '{
-              "domain": "test.example.com",
+              "domain": "localhost:8888",
               "tls_enabled": false,
               "http_redirect": false,
               "websocket": false,
@@ -180,7 +180,7 @@ jobs:
           CONTENT=$(curl -sf http://localhost:$PANEL_PORT/api/caddy/caddyfile \
             -H "Authorization: Bearer $TOKEN" | jq -r '.content')
           echo "$CONTENT"
-          echo "$CONTENT" | grep -q "test.example.com" || exit 1
+          echo "$CONTENT" | grep -q "localhost:8888" || exit 1
           echo "$CONTENT" | grep -q "reverse_proxy" || exit 1
           echo "✅ Caddyfile contains host config"
 
@@ -215,7 +215,7 @@ jobs:
 
           CONTENT=$(curl -sf http://localhost:$PANEL_PORT/api/caddy/caddyfile \
             -H "Authorization: Bearer $TOKEN" | jq -r '.content')
-          if echo "$CONTENT" | grep -q "test.example.com"; then
+          if echo "$CONTENT" | grep -q "localhost:8888"; then
             echo "❌ Disabled host should not be in Caddyfile"; exit 1
           fi
           echo "✅ Host disabled — removed from Caddyfile"
