@@ -361,7 +361,7 @@ install_from_source() {
 }
 
 install_go() {
-    local GO_VERSION="1.26.4"
+    local GO_MAJOR="1.26"
 
     if command -v go &>/dev/null; then
         CURRENT_GO=$(go version | grep -oP 'go\K[0-9]+\.[0-9]+')
@@ -369,6 +369,18 @@ install_go() {
             info "Go $CURRENT_GO already installed"
             return
         fi
+    fi
+
+    # Auto-detect latest patch version
+    info "Fetching latest Go ${GO_MAJOR}.x version..."
+    local GO_VERSION
+    GO_VERSION=$(curl -fsSL "https://go.dev/dl/?mode=json" | \
+        grep -oP "go${GO_MAJOR}\.[0-9]+" | head -1 | sed 's/^go//')
+
+    if [[ -z "$GO_VERSION" ]]; then
+        # Fallback to .0
+        GO_VERSION="${GO_MAJOR}.0"
+        warn "Could not detect latest Go version, falling back to $GO_VERSION"
     fi
 
     info "Installing Go $GO_VERSION ..."
