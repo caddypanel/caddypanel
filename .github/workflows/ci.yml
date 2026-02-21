@@ -56,10 +56,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # --- Run the actual install script ---
-      - name: Run install.sh
+      # --- Run install.sh in source build mode (no release needed) ---
+      - name: Run install.sh --from-source
         run: |
-          sudo bash install.sh --port $PANEL_PORT --yes
+          sudo bash install.sh --port $PANEL_PORT --yes --from-source
           echo "✅ install.sh completed"
 
       # --- Verify services are running ---

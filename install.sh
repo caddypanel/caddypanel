@@ -13,15 +13,16 @@
 #    --uninstall     Remove CaddyPanel (keeps data by default)
 #    --purge         Remove CaddyPanel and all data
 #    --no-caddy      Skip Caddy installation
-#    --port PORT     Set panel port (default: 8080)
+#    --port PORT     Set panel port (default: 39921)
+#    --from-source   Build from source instead of downloading pre-built binary
+#    -y, --yes       Non-interactive mode (skip prompts)
 # ============================================================================
 
 set -euo pipefail
 
 # ==================== Configuration ====================
 CADDYPANEL_VERSION="0.1.0"
-GO_VERSION="1.26.4"
-NODE_VERSION="24"
+GITHUB_REPO="caddypanel/caddypanel"
 INSTALL_DIR="/usr/local/bin"
 DATA_DIR="/var/lib/caddypanel"
 LOG_DIR="/var/log/caddypanel"
@@ -32,6 +33,7 @@ SKIP_CADDY=false
 UNINSTALL=false
 PURGE=false
 NON_INTERACTIVE=false
+FROM_SOURCE=false
 
 # ==================== Colors ====================
 RED='\033[0;31m'
@@ -99,7 +101,7 @@ detect_os() {
                 warn "Unknown OS '$OS_ID', detected dnf/yum — treating as RHEL-family"
                 OS_FAMILY="rhel"
             else
-                fatal "Unsupported OS: $OS_NAME ($OS_ID). Supported: Ubuntu, Debian, CentOS Stream, AlmaLinux, Rocky Linux, Fedora, openAnolis, Alibaba Cloud Linux, openEuler, openCloudOS, Kylin"
+                fatal "Unsupported OS: $OS_NAME ($OS_ID)."
             fi
             ;;
     esac
@@ -107,9 +109,8 @@ detect_os() {
     # Detect architecture
     ARCH=$(uname -m)
     case "$ARCH" in
-        x86_64)     GO_ARCH="amd64";   CADDY_ARCH="amd64" ;;
-        aarch64)    GO_ARCH="arm64";   CADDY_ARCH="arm64" ;;
-        armv7l)     GO_ARCH="armv6l";  CADDY_ARCH="armv7"  ;;
+        x86_64)     ARCH_SUFFIX="linux-amd64"; GO_ARCH="amd64" ;;
+        aarch64)    ARCH_SUFFIX="linux-arm64"; GO_ARCH="arm64" ;;
         *)          fatal "Unsupported architecture: $ARCH" ;;
     esac
 
@@ -120,13 +121,14 @@ detect_os() {
 parse_args() {
     while [[ $# -gt 0 ]]; do
         case "$1" in
-            --uninstall) UNINSTALL=true; shift ;;
-            --purge)     PURGE=true; UNINSTALL=true; shift ;;
-            --no-caddy)  SKIP_CADDY=true; shift ;;
-            --port)      PANEL_PORT="$2"; shift 2 ;;
-            -y|--yes)    NON_INTERACTIVE=true; shift ;;
-            -h|--help)   usage; exit 0 ;;
-            *)           warn "Unknown option: $1"; shift ;;
+            --uninstall)    UNINSTALL=true; shift ;;
+            --purge)        PURGE=true; UNINSTALL=true; shift ;;
+            --no-caddy)     SKIP_CADDY=true; shift ;;
+            --port)         PANEL_PORT="$2"; shift 2 ;;
+            --from-source)  FROM_SOURCE=true; shift ;;
+            -y|--yes)       NON_INTERACTIVE=true; shift ;;
+            -h|--help)      usage; exit 0 ;;
+            *)              warn "Unknown option: $1"; shift ;;
         esac
     done
 }
@@ -138,12 +140,13 @@ ${BOLD}CaddyPanel Installer v${CADDYPANEL_VERSION}${NC}
 Usage: bash install.sh [OPTIONS]
 
 Options:
-  --uninstall     Remove CaddyPanel (keeps data)
-  --purge         Remove CaddyPanel and all data
-  --no-caddy      Skip Caddy installation
-  --port PORT     Set panel port (default: 39921)
-  -y, --yes       Non-interactive mode (skip prompts)
-  -h, --help      Show this help
+  --uninstall      Remove CaddyPanel (keeps data)
+  --purge          Remove CaddyPanel and all data
+  --no-caddy       Skip Caddy installation
+  --port PORT      Set panel port (default: 39921)
+  --from-source    Build from source (requires Go + Node.js)
+  -y, --yes        Non-interactive mode (skip prompts)
+  -h, --help       Show this help
 
 Supported OS:
   Ubuntu 20.04+, Debian 11+, CentOS Stream 8+,
@@ -189,110 +192,23 @@ do_uninstall() {
 }
 
 # ==================== Install Dependencies ====================
-install_deps_debian() {
-    info "Updating package index..."
-    apt-get update -qq
-
-    info "Installing base dependencies..."
-    DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
-        curl wget git gcc make \
-        ca-certificates gnupg lsb-release \
-        sqlite3 > /dev/null
-}
-
-install_deps_rhel() {
-    info "Installing base dependencies..."
-    if command -v dnf &>/dev/null; then
-        dnf install -y -q \
-            curl wget git gcc make \
-            ca-certificates sqlite \
-            tar gzip which
-    else
-        yum install -y -q \
-            curl wget git gcc make \
-            ca-certificates sqlite \
-            tar gzip which
-    fi
-}
-
 install_deps() {
-    step "Installing system dependencies"
-    case "$OS_FAMILY" in
-        debian) install_deps_debian ;;
-        rhel)   install_deps_rhel ;;
-    esac
-    success "Dependencies installed"
-}
-
-# ==================== Install Go ====================
-install_go() {
-    step "Installing Go $GO_VERSION"
-
-    # Check if Go is already installed with sufficient version
-    if command -v go &>/dev/null; then
-        CURRENT_GO=$(go version | grep -oP 'go\K[0-9]+\.[0-9]+')
-        REQUIRED="1.22"
-        if printf '%s\n%s' "$REQUIRED" "$CURRENT_GO" | sort -V | head -1 | grep -q "^${REQUIRED}$"; then
-            success "Go $CURRENT_GO already installed (>= $REQUIRED)"
-            return
-        fi
-        warn "Go $CURRENT_GO found but need >= $REQUIRED, upgrading..."
-    fi
-
-    GO_TAR="go${GO_VERSION}.linux-${GO_ARCH}.tar.gz"
-    GO_URL="https://go.dev/dl/${GO_TAR}"
-
-    info "Downloading Go from $GO_URL ..."
-    wget -q --show-progress -O "/tmp/${GO_TAR}" "$GO_URL"
-
-    info "Installing to /usr/local/go ..."
-    rm -rf /usr/local/go
-    tar -C /usr/local -xzf "/tmp/${GO_TAR}"
-    rm -f "/tmp/${GO_TAR}"
-
-    # Setup PATH
-    if ! grep -q '/usr/local/go/bin' /etc/profile.d/go.sh 2>/dev/null; then
-        echo 'export PATH=$PATH:/usr/local/go/bin' > /etc/profile.d/go.sh
-    fi
-    export PATH=$PATH:/usr/local/go/bin
-
-    success "Go $(go version | grep -oP 'go\K\S+') installed"
-}
-
-# ==================== Install Node.js ====================
-install_nodejs() {
-    step "Installing Node.js $NODE_VERSION"
-
-    if command -v node &>/dev/null; then
-        NODE_VER=$(node --version | tr -d 'v' | cut -d. -f1)
-        if [[ "$NODE_VER" -ge "$NODE_VERSION" ]]; then
-            success "Node.js $(node --version) already installed (>= v$NODE_VERSION)"
-            return
-        fi
-        warn "Node.js v$NODE_VER found but need >= v$NODE_VERSION, upgrading..."
-    fi
-
+    step "Installing base dependencies"
     case "$OS_FAMILY" in
         debian)
-            info "Setting up NodeSource repository..."
-            mkdir -p /etc/apt/keyrings
-            curl -fsSL https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key | gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg 2>/dev/null
-            echo "deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_${NODE_VERSION}.x nodistro main" > /etc/apt/sources.list.d/nodesource.list
             apt-get update -qq
-            DEBIAN_FRONTEND=noninteractive apt-get install -y -qq nodejs > /dev/null
+            DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
+                curl wget ca-certificates tar gzip > /dev/null
             ;;
         rhel)
-            info "Setting up NodeSource repository..."
-            curl -fsSL https://rpm.nodesource.com/setup_${NODE_VERSION}.x | bash - > /dev/null 2>&1
             if command -v dnf &>/dev/null; then
-                dnf install -y -q nodejs
+                dnf install -y -q curl wget ca-certificates tar gzip which
             else
-                yum install -y -q nodejs
+                yum install -y -q curl wget ca-certificates tar gzip which
             fi
             ;;
     esac
-
-    success "Node.js $(node --version) installed"
+    success "Dependencies installed"
 }
 
 # ==================== Install Caddy ====================
@@ -331,37 +247,95 @@ install_caddy() {
             ;;
     esac
 
-    # Stop the default caddy service (we manage it via CaddyPanel)
+    # Stop the default caddy service (CaddyPanel manages it)
     systemctl stop caddy 2>/dev/null || true
     systemctl disable caddy 2>/dev/null || true
 
     success "Caddy $(caddy version 2>/dev/null || echo '') installed"
 }
 
-# ==================== Build CaddyPanel ====================
-build_caddypanel() {
-    step "Building CaddyPanel"
+# ==================== Install CaddyPanel (Download Pre-built) ====================
+install_prebuilt() {
+    step "Installing CaddyPanel v${CADDYPANEL_VERSION}"
+
+    # Determine download URL
+    local TARBALL="caddypanel-${ARCH_SUFFIX}.tar.gz"
+    local URL="https://github.com/${GITHUB_REPO}/releases/download/v${CADDYPANEL_VERSION}/${TARBALL}"
+
+    info "Downloading from ${URL} ..."
+    wget -q --show-progress -O "/tmp/${TARBALL}" "$URL" || {
+        error "Download failed. The release v${CADDYPANEL_VERSION} may not exist."
+        error "Try: bash install.sh --from-source"
+        exit 1
+    }
+
+    # Verify checksum if available
+    local SHA_URL="${URL}.sha256"
+    if wget -q -O "/tmp/${TARBALL}.sha256" "$SHA_URL" 2>/dev/null; then
+        info "Verifying checksum..."
+        cd /tmp && sha256sum -c "${TARBALL}.sha256" && success "Checksum verified" || warn "Checksum mismatch!"
+    fi
+
+    # Extract
+    info "Extracting..."
+    tar -xzf "/tmp/${TARBALL}" -C /tmp/
+
+    local EXTRACT_DIR="/tmp/caddypanel-${ARCH_SUFFIX}"
+
+    # Install binary
+    cp -f "${EXTRACT_DIR}/caddypanel" "$INSTALL_DIR/caddypanel"
+    chmod 755 "$INSTALL_DIR/caddypanel"
+
+    # Install frontend
+    mkdir -p "$DATA_DIR/web"
+    cp -r "${EXTRACT_DIR}/web/dist" "$DATA_DIR/web/"
+
+    # Cleanup
+    rm -rf "/tmp/${TARBALL}" "/tmp/${TARBALL}.sha256" "$EXTRACT_DIR"
+
+    success "CaddyPanel v${CADDYPANEL_VERSION} installed"
+}
+
+# ==================== Install CaddyPanel (Build from Source) ====================
+install_from_source() {
+    step "Building CaddyPanel from source"
+
+    # Install Go
+    install_go
+
+    # Install Node.js
+    install_nodejs
+
+    # Install build tools
+    case "$OS_FAMILY" in
+        debian) DEBIAN_FRONTEND=noninteractive apt-get install -y -qq gcc make git > /dev/null ;;
+        rhel)
+            if command -v dnf &>/dev/null; then
+                dnf install -y -q gcc make git
+            else
+                yum install -y -q gcc make git
+            fi
+            ;;
+    esac
 
     # Determine source directory
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-    # Check if we're in the source tree
     if [[ -f "$SCRIPT_DIR/main.go" ]]; then
         SRC_DIR="$SCRIPT_DIR"
     elif [[ -f "$SCRIPT_DIR/../main.go" ]]; then
         SRC_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
     else
-        # Clone from repository
         info "Cloning CaddyPanel source..."
         SRC_DIR="/tmp/caddypanel-build"
         rm -rf "$SRC_DIR"
-        git clone --depth 1 https://github.com/caddypanel/caddypanel.git "$SRC_DIR"
+        git clone --depth 1 https://github.com/${GITHUB_REPO}.git "$SRC_DIR"
     fi
 
     info "Source directory: $SRC_DIR"
 
     # Build frontend
-    info "Building frontend (npm install + build)..."
+    info "Building frontend..."
     cd "$SRC_DIR/web"
     npm install --loglevel=warn 2>&1 | tail -3
     npm run build 2>&1 | tail -5
@@ -376,22 +350,69 @@ build_caddypanel() {
     success "Backend built"
 
     # Install binary
-    info "Installing binary to $INSTALL_DIR/caddypanel ..."
     cp -f caddypanel "$INSTALL_DIR/caddypanel"
     chmod 755 "$INSTALL_DIR/caddypanel"
 
-    # Copy frontend dist
+    # Install frontend
     mkdir -p "$DATA_DIR/web/dist"
     cp -r web/dist/* "$DATA_DIR/web/dist/"
 
-    success "CaddyPanel v${CADDYPANEL_VERSION} installed to $INSTALL_DIR/caddypanel"
+    success "CaddyPanel v${CADDYPANEL_VERSION} installed"
+}
+
+install_go() {
+    local GO_VERSION="1.26.4"
+
+    if command -v go &>/dev/null; then
+        CURRENT_GO=$(go version | grep -oP 'go\K[0-9]+\.[0-9]+')
+        if printf '%s\n%s' "1.22" "$CURRENT_GO" | sort -V | head -1 | grep -q "^1.22$"; then
+            info "Go $CURRENT_GO already installed"
+            return
+        fi
+    fi
+
+    info "Installing Go $GO_VERSION ..."
+    local GO_TAR="go${GO_VERSION}.linux-${GO_ARCH}.tar.gz"
+    wget -q --show-progress -O "/tmp/${GO_TAR}" "https://go.dev/dl/${GO_TAR}"
+    rm -rf /usr/local/go
+    tar -C /usr/local -xzf "/tmp/${GO_TAR}"
+    rm -f "/tmp/${GO_TAR}"
+    echo 'export PATH=$PATH:/usr/local/go/bin' > /etc/profile.d/go.sh
+    export PATH=$PATH:/usr/local/go/bin
+    success "Go $(go version | grep -oP 'go\K\S+') installed"
+}
+
+install_nodejs() {
+    local NODE_MAJOR="24"
+
+    if command -v node &>/dev/null; then
+        NODE_VER=$(node --version | tr -d 'v' | cut -d. -f1)
+        if [[ "$NODE_VER" -ge "$NODE_MAJOR" ]]; then
+            info "Node.js $(node --version) already installed"
+            return
+        fi
+    fi
+
+    info "Fetching latest Node.js v${NODE_MAJOR}.x ..."
+    local NODE_FULL_VER
+    NODE_FULL_VER=$(curl -fsSL "https://nodejs.org/dist/latest-v${NODE_MAJOR}.x/" \
+        | grep -oP 'node-v\K[0-9]+\.[0-9]+\.[0-9]+' | head -1)
+
+    [[ -z "$NODE_FULL_VER" ]] && fatal "Failed to fetch Node.js version"
+
+    local NODE_TAR="node-v${NODE_FULL_VER}-linux-${GO_ARCH}.tar.xz"
+    info "Downloading Node.js v${NODE_FULL_VER} ..."
+    wget -q --show-progress -O "/tmp/${NODE_TAR}" "https://nodejs.org/dist/v${NODE_FULL_VER}/${NODE_TAR}"
+    tar -C /usr/local --strip-components=1 -xJf "/tmp/${NODE_TAR}"
+    rm -f "/tmp/${NODE_TAR}"
+    hash -r
+    success "Node.js $(node --version) installed"
 }
 
 # ==================== Setup System ====================
 setup_user() {
     step "Setting up system user and directories"
 
-    # Create system user
     if ! id "$SERVICE_USER" &>/dev/null; then
         useradd --system --no-create-home --shell /usr/sbin/nologin "$SERVICE_USER"
         info "Created system user: $SERVICE_USER"
@@ -399,12 +420,10 @@ setup_user() {
         info "User $SERVICE_USER already exists"
     fi
 
-    # Create directories
     mkdir -p "$DATA_DIR"/{backups,web/dist}
     mkdir -p "$LOG_DIR"
     mkdir -p "$CONFIG_DIR"
 
-    # Set ownership
     chown -R "$SERVICE_USER:$SERVICE_USER" "$DATA_DIR"
     chown -R "$SERVICE_USER:$SERVICE_USER" "$LOG_DIR"
 
@@ -418,16 +437,11 @@ setup_config() {
 
     if [[ -f "$ENV_FILE" ]]; then
         info "Config file already exists, preserving: $ENV_FILE"
-        return
-    fi
+    else
+        JWT_SECRET=$(head -c 32 /dev/urandom | base64 | tr -dc 'a-zA-Z0-9' | head -c 48)
+        CADDY_BIN=$(command -v caddy 2>/dev/null || echo "/usr/bin/caddy")
 
-    # Generate random JWT secret
-    JWT_SECRET=$(head -c 32 /dev/urandom | base64 | tr -dc 'a-zA-Z0-9' | head -c 48)
-
-    # Determine Caddy binary path
-    CADDY_BIN=$(command -v caddy 2>/dev/null || echo "/usr/bin/caddy")
-
-    cat > "$ENV_FILE" <<ENVEOF
+        cat > "$ENV_FILE" <<ENVEOF
 # CaddyPanel Configuration
 # Generated on $(date -Iseconds)
 
@@ -441,10 +455,10 @@ CADDYPANEL_LOG_DIR=${LOG_DIR}
 CADDYPANEL_ADMIN_API=http://localhost:2019
 ENVEOF
 
-    chmod 600 "$ENV_FILE"
-    chown root:root "$ENV_FILE"
-
-    success "Config written to $ENV_FILE (JWT secret auto-generated)"
+        chmod 600 "$ENV_FILE"
+        chown root:root "$ENV_FILE"
+        success "Config written to $ENV_FILE"
+    fi
 
     # Create default Caddyfile so Caddy can start immediately
     CADDYFILE="${DATA_DIR}/Caddyfile"
@@ -474,13 +488,10 @@ CFEOF
 setup_systemd() {
     step "Setting up systemd service"
 
-    # Determine Caddy binary for the service dependency
-    CADDY_BIN=$(command -v caddy 2>/dev/null || echo "/usr/bin/caddy")
-
     cat > /etc/systemd/system/caddypanel.service <<SVCEOF
 [Unit]
 Description=CaddyPanel - Caddy Reverse Proxy Management Panel
-Documentation=https://github.com/caddypanel/caddypanel
+Documentation=https://github.com/${GITHUB_REPO}
 After=network-online.target
 Wants=network-online.target
 
@@ -526,13 +537,11 @@ setup_firewall() {
     step "Configuring firewall"
 
     if command -v ufw &>/dev/null; then
-        info "Configuring UFW..."
         ufw allow "$PANEL_PORT"/tcp comment "CaddyPanel" > /dev/null 2>&1 || true
         ufw allow 80/tcp comment "HTTP" > /dev/null 2>&1 || true
         ufw allow 443/tcp comment "HTTPS" > /dev/null 2>&1 || true
         success "UFW rules added (ports $PANEL_PORT, 80, 443)"
     elif command -v firewall-cmd &>/dev/null; then
-        info "Configuring firewalld..."
         firewall-cmd --permanent --add-port="${PANEL_PORT}/tcp" > /dev/null 2>&1 || true
         firewall-cmd --permanent --add-service=http > /dev/null 2>&1 || true
         firewall-cmd --permanent --add-service=https > /dev/null 2>&1 || true
@@ -543,16 +552,12 @@ setup_firewall() {
     fi
 }
 
-# ==================== Allow Caddy to bind privileged ports ====================
 setup_caddy_permissions() {
     if $SKIP_CADDY; then return; fi
 
-    # Allow the caddypanel user to use caddy on privileged ports
     CADDY_BIN=$(command -v caddy 2>/dev/null || echo "")
     if [[ -n "$CADDY_BIN" ]]; then
-        # Grant cap_net_bind_service to caddy binary
         setcap 'cap_net_bind_service=+ep' "$CADDY_BIN" 2>/dev/null || true
-        # Allow caddypanel user to run caddy
         if [[ -d /etc/sudoers.d ]]; then
             echo "${SERVICE_USER} ALL=(ALL) NOPASSWD: ${CADDY_BIN}" > /etc/sudoers.d/caddypanel 2>/dev/null || true
             chmod 0440 /etc/sudoers.d/caddypanel 2>/dev/null || true
@@ -560,26 +565,8 @@ setup_caddy_permissions() {
     fi
 }
 
-# ==================== Start Service ====================
-start_service() {
-    step "Starting CaddyPanel"
-
-    systemctl start caddypanel
-
-    sleep 2
-
-    if systemctl is-active --quiet caddypanel; then
-        success "CaddyPanel is running!"
-    else
-        error "CaddyPanel failed to start. Check logs with:"
-        echo "  journalctl -u caddypanel -n 50 --no-pager"
-        exit 1
-    fi
-}
-
 # ==================== Interactive Prompts ====================
 prompt_port() {
-    # Skip if port was already set via --port flag or in non-interactive mode
     if $NON_INTERACTIVE; then
         info "Panel port: $PANEL_PORT (non-interactive mode)"
         return
@@ -595,7 +582,6 @@ prompt_port() {
     echo ""
 
     if [[ -n "$INPUT_PORT" ]]; then
-        # Validate port number
         if [[ "$INPUT_PORT" =~ ^[0-9]+$ ]] && [ "$INPUT_PORT" -ge 1 ] && [ "$INPUT_PORT" -le 65535 ]; then
             PANEL_PORT="$INPUT_PORT"
             success "Panel port set to: $PANEL_PORT"
@@ -607,9 +593,24 @@ prompt_port() {
     fi
 }
 
+# ==================== Start Service ====================
+start_service() {
+    step "Starting CaddyPanel"
+
+    systemctl start caddypanel
+    sleep 2
+
+    if systemctl is-active --quiet caddypanel; then
+        success "CaddyPanel is running!"
+    else
+        error "CaddyPanel failed to start. Check logs with:"
+        echo "  journalctl -u caddypanel -n 50 --no-pager"
+        exit 1
+    fi
+}
+
 # ==================== Print Summary ====================
 print_summary() {
-    # Get local IP
     LOCAL_IP=$(hostname -I 2>/dev/null | awk '{print $1}' || echo "YOUR_SERVER_IP")
 
     echo ""
@@ -664,11 +665,17 @@ main() {
     prompt_port
 
     install_deps
-    install_go
-    install_nodejs
     install_caddy
     setup_user
-    build_caddypanel
+
+    # Install CaddyPanel binary + frontend
+    if $FROM_SOURCE; then
+        info "Building from source (--from-source)"
+        install_from_source
+    else
+        install_prebuilt
+    fi
+
     setup_config
     setup_systemd
     setup_caddy_permissions
