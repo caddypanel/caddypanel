@@ -1,5 +1,6 @@
 import { NavLink, Outlet, useNavigate } from 'react-router'
 import { Box, Flex, Text, Button, DropdownMenu, Separator, Tooltip } from '@radix-ui/themes'
+import { useState, useEffect } from 'react'
 import {
     Zap,
     LayoutDashboard,
@@ -15,6 +16,7 @@ import {
     ChevronDown,
 } from 'lucide-react'
 import { useAuthStore } from '../stores/auth.js'
+import { dashboardAPI } from '../api/index.js'
 
 const navItems = [
     { to: '/', icon: LayoutDashboard, label: 'Dashboard', end: true },
@@ -68,6 +70,13 @@ function SidebarLink({ to, icon: Icon, label, end }) {
 export default function Layout() {
     const navigate = useNavigate()
     const { user, logout } = useAuthStore()
+    const [version, setVersion] = useState('')
+
+    useEffect(() => {
+        dashboardAPI.stats().then(res => {
+            setVersion(res.data?.system?.panel_version || '')
+        }).catch(() => { })
+    }, [])
 
     const handleLogout = () => {
         logout()
@@ -79,63 +88,63 @@ export default function Layout() {
             {/* Sidebar */}
             <Box
                 style={{
-                    width: 240,
-                    minWidth: 240,
-                    borderRight: '1px solid #1e1e22',
+                    width: 220,
+                    minWidth: 220,
                     background: '#111113',
+                    borderRight: '1px solid #27272a',
                     display: 'flex',
                     flexDirection: 'column',
                 }}
             >
                 {/* Logo */}
                 <Flex align="center" gap="2" p="4" pb="2">
-                    <Flex
-                        align="center"
-                        justify="center"
+                    <Box
                         style={{
                             width: 32,
                             height: 32,
                             borderRadius: 8,
                             background: 'linear-gradient(135deg, #10b981, #059669)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
                         }}
                     >
-                        <Zap size={16} color="white" />
-                    </Flex>
-                    <Text size="3" weight="bold" style={{ color: '#fafafa' }}>
+                        <Zap size={18} color="white" />
+                    </Box>
+                    <Text size="4" weight="bold" style={{ color: '#fafafa' }}>
                         CaddyPanel
                     </Text>
                 </Flex>
 
-                <Separator size="4" style={{ opacity: 0.15 }} />
+                <Separator size="4" style={{ background: '#27272a' }} />
 
-                {/* Nav links */}
-                <Flex direction="column" gap="1" p="3" style={{ flex: 1 }}>
-                    {navItems.map((item) => (
-                        <SidebarLink key={item.to} {...item} />
-                    ))}
-                </Flex>
+                {/* Nav items */}
+                <Box style={{ flex: 1, padding: '8px 12px' }}>
+                    <Flex direction="column" gap="1" mt="2">
+                        {navItems.map((item) => (
+                            <SidebarLink key={item.to} {...item} />
+                        ))}
+                    </Flex>
+                </Box>
 
-                {/* User section */}
-                <Box p="3" style={{ borderTop: '1px solid #1e1e22' }}>
+                {/* User menu */}
+                <Box p="3" style={{ borderTop: '1px solid #27272a' }}>
                     <DropdownMenu.Root>
                         <DropdownMenu.Trigger>
                             <button
                                 style={{
+                                    width: '100%',
                                     display: 'flex',
                                     alignItems: 'center',
                                     gap: 8,
-                                    width: '100%',
-                                    padding: '8px 12px',
+                                    padding: '8px 10px',
+                                    borderRadius: 6,
                                     border: 'none',
-                                    borderRadius: 8,
-                                    background: 'rgba(255,255,255,0.03)',
-                                    color: '#a1a1aa',
+                                    background: 'transparent',
+                                    color: '#d4d4d8',
                                     cursor: 'pointer',
-                                    fontSize: '0.85rem',
-                                    transition: 'background 0.15s',
+                                    fontSize: 13,
                                 }}
-                                onMouseEnter={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.06)')}
-                                onMouseLeave={(e) => (e.currentTarget.style.background = 'rgba(255,255,255,0.03)')}
                             >
                                 <User size={16} />
                                 <span style={{ flex: 1, textAlign: 'left' }}>
@@ -160,11 +169,28 @@ export default function Layout() {
                     flex: 1,
                     background: '#09090b',
                     overflow: 'auto',
+                    position: 'relative',
                 }}
             >
-                <Box p="5" style={{ maxWidth: 1200, margin: '0 auto' }}>
+                <Box p="5" style={{ maxWidth: 1200, margin: '0 auto', paddingBottom: 48 }}>
                     <Outlet />
                 </Box>
+                {version && (
+                    <Text
+                        size="1"
+                        style={{
+                            position: 'fixed',
+                            bottom: 8,
+                            right: 12,
+                            color: '#3f3f46',
+                            userSelect: 'none',
+                            fontFamily: 'monospace',
+                            fontSize: '0.7rem',
+                        }}
+                    >
+                        CaddyPanel v{version}
+                    </Text>
+                )}
             </Box>
         </Flex>
     )

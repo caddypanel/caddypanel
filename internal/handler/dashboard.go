@@ -9,16 +9,15 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-const panelVersion = "0.3.0"
-
 // DashboardHandler handles dashboard statistics
 type DashboardHandler struct {
 	hostSvc  *service.HostService
 	caddyMgr *caddy.Manager
+	version  string
 }
 
-func NewDashboardHandler(hostSvc *service.HostService, caddyMgr *caddy.Manager) *DashboardHandler {
-	return &DashboardHandler{hostSvc: hostSvc, caddyMgr: caddyMgr}
+func NewDashboardHandler(hostSvc *service.HostService, caddyMgr *caddy.Manager, version string) *DashboardHandler {
+	return &DashboardHandler{hostSvc: hostSvc, caddyMgr: caddyMgr, version: version}
 }
 
 // Stats returns comprehensive dashboard statistics
@@ -89,7 +88,7 @@ func (h *DashboardHandler) Stats(c *gin.Context) {
 			"with_auth": withAuth,
 		},
 		"system": gin.H{
-			"panel_version": panelVersion,
+			"panel_version": h.version,
 			"go_version":    runtime.Version(),
 			"go_os":         runtime.GOOS,
 			"go_arch":       runtime.GOARCH,

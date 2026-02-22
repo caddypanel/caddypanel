@@ -17,6 +17,9 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// Version is set at build time via -ldflags "-X main.Version=x.y.z"
+var Version = "dev"
+
 func main() {
 	// Load configuration
 	cfg := config.Load()
@@ -68,7 +71,7 @@ func main() {
 	protected.GET("/auth/me", authH.Me)
 
 	// Dashboard stats
-	dashH := handler.NewDashboardHandler(hostSvc, caddyMgr)
+	dashH := handler.NewDashboardHandler(hostSvc, caddyMgr, Version)
 	protected.GET("/dashboard/stats", dashH.Stats)
 
 	// Host CRUD
