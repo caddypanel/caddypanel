@@ -1,13 +1,13 @@
 import { useState, useEffect, useRef } from 'react'
 import {
     Box, Flex, Heading, Text, Button, Card, Badge, Callout, Separator, Code,
-    Tabs,
+    Tabs, Switch,
 } from '@radix-ui/themes'
 import {
     Play, Square, RefreshCw, Download, Upload, Server, FileCode,
     AlertCircle, CheckCircle2,
 } from 'lucide-react'
-import { caddyAPI, configAPI } from '../api/index.js'
+import { caddyAPI, configAPI, settingAPI } from '../api/index.js'
 
 export default function Settings() {
     const [caddyStatus, setCaddyStatus] = useState(null)
@@ -15,6 +15,7 @@ export default function Settings() {
     const [actionLoading, setActionLoading] = useState(null)
     const [message, setMessage] = useState(null)
     const fileInputRef = useRef(null)
+    const [autoReload, setAutoReload] = useState(true)
 
     const fetchStatus = async () => {
         try {
@@ -34,9 +35,18 @@ export default function Settings() {
         }
     }
 
+    const fetchSettings = async () => {
+        try {
+            const res = await settingAPI.getAll()
+            const settings = res.data.settings || {}
+            setAutoReload(settings.auto_reload !== 'false')
+        } catch { /* ignore */ }
+    }
+
     useEffect(() => {
         fetchStatus()
         fetchCaddyfile()
+        fetchSettings()
     }, [])
 
     const showMessage = (type, text) => {
@@ -65,6 +75,17 @@ export default function Settings() {
             showMessage('error', err.response?.data?.error || `Failed to ${action} Caddy`)
         } finally {
             setActionLoading(null)
+        }
+    }
+
+    const handleToggleAutoReload = async (value) => {
+        setAutoReload(value)
+        try {
+            await settingAPI.update('auto_reload', value ? 'true' : 'false')
+            showMessage('success', value ? '已开启自动重载' : '已关闭自动重载')
+        } catch {
+            setAutoReload(!value) // revert on error
+            showMessage('error', '保存设置失败')
         }
     }
 
@@ -191,6 +212,30 @@ export default function Settings() {
                                 {actionLoading === 'reload' ? 'Reloading...' : 'Reload'}
                             </Button>
                         </Flex>
+                    </Card>
+
+                    <Card mt="4" style={{ background: '#111113', border: '1px solid #1e1e22' }}>
+                        <Heading size="3" mb="3">自动管理</Heading>
+
+                        <Flex justify="between" align="center">
+                            <Flex direction="column" style={{ flex: 1 }}>
+                                <Text size="2" weight="medium">自动重载 Caddy</Text>
+                                <Text size="1" color="gray">
+                                    添加/修改/删除站点后自动重载 Caddy 使配置生效。关闭后需手动点击 Reload。
+                                </Text>
+                            </Flex>
+                            <Switch
+                                checked={autoReload}
+                                onCheckedChange={handleToggleAutoReload}
+                            />
+                        </Flex>
+
+                        <Callout.Root color="blue" size="1" mt="3">
+                            <Callout.Icon><AlertCircle size={14} /></Callout.Icon>
+                            <Callout.Text>
+                                面板启动时会自动启动 Caddy Server。开启自动重载后，如果 Caddy 未运行也会自动启动。
+                            </Callout.Text>
+                        </Callout.Root>
                     </Card>
                 </Tabs.Content>
 

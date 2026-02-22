@@ -42,6 +42,14 @@ func main() {
 		log.Printf("⚠️  Failed to apply initial config: %v", err)
 	}
 
+	// Auto-start Caddy if not already running
+	if !caddyMgr.IsRunning() {
+		log.Println("Caddy not running, auto-starting...")
+		if err := caddyMgr.Start(); err != nil {
+			log.Printf("⚠️  Failed to auto-start Caddy: %v", err)
+		}
+	}
+
 	// Setup Gin
 	r := gin.Default()
 
@@ -128,6 +136,11 @@ func main() {
 	protected.POST("/dns-providers", dnsH.Create)
 	protected.PUT("/dns-providers/:id", dnsH.Update)
 	protected.DELETE("/dns-providers/:id", dnsH.Delete)
+
+	// Settings
+	settingH := handler.NewSettingHandler(db)
+	protected.GET("/settings/all", settingH.GetAll)
+	protected.PUT("/settings", settingH.Update)
 
 	// ============ Frontend Static Files ============
 	setupFrontend(r)

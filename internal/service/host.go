@@ -344,9 +344,26 @@ func (s *HostService) ApplyConfig() error {
 		return fmt.Errorf("failed to write Caddyfile: %w", err)
 	}
 
-	if s.caddyMgr.IsRunning() {
-		if err := s.caddyMgr.Reload(); err != nil {
-			return fmt.Errorf("failed to reload Caddy: %w", err)
+	// Check auto_reload setting
+	var setting model.Setting
+	autoReload := true // default to true
+	if s.db.Where("key = ?", "auto_reload").First(&setting).Error == nil {
+		autoReload = setting.Value == "true"
+	}
+
+	if autoReload {
+		if s.caddyMgr.IsRunning() {
+			if err := s.caddyMgr.Reload(); err != nil {
+				return fmt.Errorf("failed to reload Caddy: %w", err)
+			}
+			log.Println("Caddy reloaded after config change")
+		} else {
+			if err := s.caddyMgr.Start(); err != nil {
+				log.Printf("⚠️  Failed to auto-start Caddy: %v", err)
+				// Don't return error — config was written successfully
+			} else {
+				log.Println("Caddy auto-started after config change")
+			}
 		}
 	}
 

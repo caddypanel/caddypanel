@@ -25,6 +25,12 @@ type DnsProvider struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
+// Setting stores panel configuration as key-value pairs
+type Setting struct {
+	Key   string `gorm:"primaryKey;size:64" json:"key"`
+	Value string `gorm:"type:text" json:"value"`
+}
+
 // Host represents a reverse proxy or redirect host configuration
 type Host struct {
 	ID             uint           `gorm:"primaryKey" json:"id"`

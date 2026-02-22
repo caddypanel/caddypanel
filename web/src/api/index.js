@@ -92,6 +92,12 @@ export const auditAPI = {
     list: (params) => api.get('/audit/logs', { params }),
 }
 
+// ============ Settings ============
+export const settingAPI = {
+    getAll: () => api.get('/settings/all'),
+    update: (key, value) => api.put('/settings', { key, value }),
+}
+
 // ============ DNS Providers ============
 export const dnsProviderAPI = {
     list: () => api.get('/dns-providers'),

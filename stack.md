@@ -56,6 +56,7 @@ CaddyPanel 采用经典的前后端分离 + 单二进制分发架构：
 | 路由 | React Router | 7 | SPA 路由 |
 | HTTP | Axios | 1.13 | API 请求客户端 |
 | 图标 | Lucide React | — | SVG 图标库 |
+| 编辑器 | CodeMirror | 6 | Caddyfile 在线编辑器 |
 
 ### 部署
 
@@ -77,14 +78,19 @@ main.go                        入口：初始化组件、注册路由、启动�
   ├── internal/handler/        控制器层：HTTP 请求处理
   │     ├── auth.go              登录/注册/用户信息
   │     ├── host.go              Host CRUD
-  │     ├── caddy.go             进程控制
+  │     ├── caddy.go             进程控制 + Caddyfile 编辑器 API
   │     ├── log.go               日志查看
-  │     └── export.go            配置导入/导出
+  │     ├── export.go            配置导入/导出
+  │     ├── dashboard.go         Dashboard 统计
+  │     ├── user.go              多用户管理
+  │     ├── audit.go             审计日志
+  │     ├── cert.go              SSL 证书上传
+  │     └── dns_provider.go      DNS Provider CRUD
   ├── internal/service/        服务层：业务逻辑
   │     └── host.go              Host CRUD + ApplyConfig
   └── internal/caddy/          Caddy 管理层
         ├── renderer.go          数据库 → Caddyfile 渲染
-        └── manager.go           进程启停 + 原子写入
+        └── manager.go           进程启停 + 原子写入 + Format/Validate
 ```
 
 ## 数据流
@@ -159,25 +165,32 @@ rename 是文件系统原子操作，中途崩溃不会出现半写状态
 ## 数据库模型
 
 ```
-users           用户表（管理员）
-  └─ id, username, password(bcrypt), timestamps
+users             用户表
+  └─ id, username, password(bcrypt), role(admin/viewer), timestamps
 
-hosts           反向代理/跳转主表
-  ├─ id, domain, host_type(proxy/redirect), enabled, tls_enabled
+dns_providers     DNS API 提供商
+  └─ id, name, provider(cloudflare/alidns/tencentcloud/route53),
+     config(JSON), is_default, timestamps
+
+audit_logs        审计日志
+  └─ id, user_id, username, action, target, target_id, detail, ip, created_at
+
+hosts             站点主表
+  ├─ id, domain, host_type(proxy/redirect/static/php), enabled
+  ├─ tls_enabled, tls_mode(auto/dns/wildcard/custom/off), dns_provider_id
   ├─ http_redirect, websocket
   ├─ redirect_url, redirect_code        # redirect 类型
+  ├─ root_path, directory_browse, php_fastcgi, index_files  # static/php 类型
   ├─ custom_cert_path, custom_key_path  # 自定义证书
-  ├─ timestamps
-  ├── upstreams[]       上游服务器（一对多）
-  │     └─ address, weight, sort_order
-  ├── routes[]          路径路由（一对多）
-  │     └─ path, upstream_id, sort_order
-  ├── custom_headers[]  自定义 Header（一对多）
-  │     └─ direction, operation, name, value
-  ├── access_rules[]    IP 访问控制（一对多）
-  │     └─ rule_type(allow/deny), ip_range(CIDR)
-  └── basic_auths[]     HTTP Basic Auth（一对多）
-        └─ username, password_hash(bcrypt)
+  ├─ compression, cache_enabled, cache_ttl  # 性能选项
+  ├─ cors_enabled, cors_origins, cors_methods, cors_headers  # CORS
+  ├─ security_headers, error_page_path  # 安全/错误页
+  ├─ custom_directives  # 自定义 Caddy 指令
+  ├── upstreams[]         上游服务器（一对多）
+  ├── routes[]            路径路由（一对多）
+  ├── custom_headers[]    自定义 Header（一对多）
+  ├── access_rules[]      IP 访问控制（一对多）
+  └── basic_auths[]       HTTP Basic Auth（一对多）
 ```
 
 ## API 端点
@@ -188,6 +201,7 @@ hosts           反向代理/跳转主表
 | POST | `/api/auth/login` | ✗ | 登录 |
 | GET | `/api/auth/need-setup` | ✗ | 是否需要初始化 |
 | GET | `/api/auth/me` | ✓ | 当前用户 |
+| GET | `/api/dashboard/stats` | ✓ | Dashboard 统计 |
 | GET | `/api/hosts` | ✓ | 列出全部 Host |
 | POST | `/api/hosts` | ✓ | 创建 Host |
 | GET | `/api/hosts/:id` | ✓ | 获取 Host |
@@ -201,11 +215,24 @@ hosts           反向代理/跳转主表
 | POST | `/api/caddy/stop` | ✓ | 停止 Caddy |
 | POST | `/api/caddy/reload` | ✓ | 重载配置 |
 | GET | `/api/caddy/caddyfile` | ✓ | 查看 Caddyfile |
+| POST | `/api/caddy/caddyfile` | ✓ | 保存 Caddyfile |
+| POST | `/api/caddy/fmt` | ✓ | 格式化 Caddyfile |
+| POST | `/api/caddy/validate` | ✓ | 验证 Caddyfile 语法 |
 | GET | `/api/logs` | ✓ | 查看日志 |
 | GET | `/api/logs/files` | ✓ | 列出日志文件 |
 | GET | `/api/logs/download` | ✓ | 下载日志 |
 | GET | `/api/config/export` | ✓ | 导出配置 |
 | POST | `/api/config/import` | ✓ | 导入配置 |
+| GET | `/api/users` | ✓ | 列出用户 |
+| POST | `/api/users` | ✓ | 创建用户 |
+| PUT | `/api/users/:id` | ✓ | 更新用户 |
+| DELETE | `/api/users/:id` | ✓ | 删除用户 |
+| GET | `/api/audit/logs` | ✓ | 审计日志查询 |
+| GET | `/api/dns-providers` | ✓ | 列出 DNS Provider |
+| POST | `/api/dns-providers` | ✓ | 创建 DNS Provider |
+| GET | `/api/dns-providers/:id` | ✓ | 获取 DNS Provider |
+| PUT | `/api/dns-providers/:id` | ✓ | 更新 DNS Provider |
+| DELETE | `/api/dns-providers/:id` | ✓ | 删除 DNS Provider |
 
 ## 安全设计
 

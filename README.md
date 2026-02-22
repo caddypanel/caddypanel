@@ -17,16 +17,36 @@
 
 ## ✨ 功能特性
 
-- 🌐 **Host 管理** — 通过 UI 创建/编辑/删除 域名 → 上游 反向代理映射
-- 🔒 **自动 HTTPS** — Let's Encrypt 证书自动申请/续签，一键开关 HTTP→HTTPS 重定向
-- 📋 **日志查看** — 实时查看/搜索/下载 Caddy 访问日志和错误日志
-- 🔄 **进程控制** — 一键启停/重载 Caddy，零停机 Graceful Reload
-- 🔑 **面板认证** — JWT 登录保护，首次启动引导创建管理员
-- 📦 **导入/导出** — 一键备份和恢复所有配置（JSON 格式）
+### 站点管理
+- 🌐 **多类型 Host** — 反向代理、301/302 跳转、静态网站、PHP/FastCGI 站点
 - ⚖️ **负载均衡** — 支持多上游服务器 + Round Robin
 - 🔌 **WebSocket** — 原生 WebSocket 代理支持
 - 📝 **自定义 Header** — 请求/响应 Header 重写
 - 🛡️ **IP 访问控制** — IP 白名单/黑名单（CIDR 格式）
+- 🔐 **HTTP Basic Auth** — bcrypt 加密的 HTTP 认证保护
+- 📦 **导入/导出** — 一键备份和恢复所有配置（JSON 格式）
+
+### 证书管理
+- 🔒 **自动 HTTPS** — Let's Encrypt 证书自动申请/续签
+- 🌍 **DNS Challenge** — 支持 Cloudflare、阿里云、腾讯云、Route53 DNS 验证
+- 🃏 **通配符证书** — 通过 DNS Provider 申请 `*.domain.com` 证书
+- 📜 **自定义证书** — 上传自有 SSL 证书
+
+### 性能和安全
+- 🗜️ **响应压缩** — Gzip + Zstd 自动压缩
+- 🌐 **CORS 跨域** — 一键配置跨域资源共享
+- 🔰 **安全响应头** — HSTS / X-Frame-Options / CSP 一键开启
+- 🚨 **自定义错误页** — 404/502/503 错误页面定制
+
+### 编辑器和管理
+- ✏️ **Caddyfile 编辑器** — CodeMirror 6 在线编辑器，支持格式化/语法验证/保存
+- 👥 **多用户管理** — 用户 CRUD + admin/viewer 角色
+- 📋 **审计日志** — 所有操作记录，追踪 IP 和操作详情
+- 📊 **Dashboard** — Host 分类统计、TLS 状态、系统信息
+
+### 系统
+- 🔄 **进程控制** — 一键启停/重载 Caddy，零停机 Graceful Reload
+- 📋 **日志查看** — 实时查看/搜索/下载 Caddy 访问日志和错误日志
 - 💾 **SQLite 持久化** — 零依赖嵌入式数据库，重启数据不丢失
 
 ## 📸 截图
@@ -101,39 +121,12 @@ cd web && npm install && npm run dev
 # → http://localhost:5173（自动代理 API 到后端）
 ```
 
-## 📡 API 速览
-
-所有接口需要 JWT Token（`Authorization: Bearer <token>`），登录和初始设置接口除外。
-
-```bash
-# 创建管理员（首次）
-curl -X POST http://localhost:39921/api/auth/setup \
-  -H 'Content-Type: application/json' \
-  -d '{"username":"admin","password":"yourpassword"}'
-
-# 登录
-curl -X POST http://localhost:39921/api/auth/login \
-  -H 'Content-Type: application/json' \
-  -d '{"username":"admin","password":"yourpassword"}'
-
-# 创建反向代理 Host
-curl -X POST http://localhost:39921/api/hosts \
-  -H "Authorization: Bearer YOUR_TOKEN" \
-  -H 'Content-Type: application/json' \
-  -d '{
-    "domain": "app.example.com",
-    "tls_enabled": true,
-    "upstreams": [{"address": "localhost:3000"}]
-  }'
-```
-
-完整 API 列表请参考 [stack.md](stack.md)。
-
 ## 📂 目录结构
 
 ```
 caddypanel/
 ├── main.go                  # 入口
+├── VERSION                  # 版本号（唯一真相源）
 ├── internal/
 │   ├── config/              # 环境变量配置
 │   ├── model/               # 数据模型（GORM）
@@ -171,10 +164,18 @@ caddypanel/
 - [x] 面板认证（JWT）
 - [x] 配置导入/导出
 - [x] 一键安装脚本
-- [ ] DNS Challenge 支持
-- [ ] 多用户与权限管理
+- [x] 多用户与权限管理
+- [x] 审计日志
+- [x] Dashboard 增强
+- [x] DNS Challenge 支持 (Cloudflare / 阿里云 / 腾讯云 / Route53)
+- [x] 通配符证书
+- [x] 自定义 SSL 证书上传
+- [x] 静态网站 / PHP 站点托管
+- [x] Caddyfile 在线编辑器
+- [x] 响应压缩 / CORS / 安全头 / 错误页
 - [ ] 仪表盘流量统计
 - [ ] 插件系统
+- [ ] 速率限制
 
 ## 📄 License
 
