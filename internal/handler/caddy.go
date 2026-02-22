@@ -77,3 +77,61 @@ func (h *CaddyHandler) GetCaddyfile(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{"content": content})
 }
+
+// Format formats a Caddyfile string
+func (h *CaddyHandler) Format(c *gin.Context) {
+	var req struct {
+		Content string `json:"content" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	formatted, err := h.mgr.Format(req.Content)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"content": formatted})
+}
+
+// Validate validates a Caddyfile string
+func (h *CaddyHandler) Validate(c *gin.Context) {
+	var req struct {
+		Content string `json:"content" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := h.mgr.Validate(req.Content); err != nil {
+		c.JSON(http.StatusOK, gin.H{"valid": false, "error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"valid": true})
+}
+
+// SaveCaddyfile saves and optionally reloads the Caddyfile
+func (h *CaddyHandler) SaveCaddyfile(c *gin.Context) {
+	var req struct {
+		Content string `json:"content" binding:"required"`
+		Reload  bool   `json:"reload"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if err := h.mgr.WriteCaddyfile(req.Content); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	h.audit(c, "SAVE_CADDYFILE", "Saved Caddyfile via editor")
+	if req.Reload {
+		if err := h.mgr.Reload(); err != nil {
+			c.JSON(http.StatusOK, gin.H{"message": "Caddyfile saved but reload failed", "reload_error": err.Error()})
+			return
+		}
+		h.audit(c, "RELOAD", "Reloaded after Caddyfile save")
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "Caddyfile saved successfully"})
+}

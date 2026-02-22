@@ -5,6 +5,8 @@ import {
     LayoutDashboard,
     Globe,
     FileText,
+    FileCode,
+    Shield,
     Settings,
     LogOut,
     User,
@@ -17,6 +19,8 @@ import { useAuthStore } from '../stores/auth.js'
 const navItems = [
     { to: '/', icon: LayoutDashboard, label: 'Dashboard', end: true },
     { to: '/hosts', icon: Globe, label: '站点管理' },
+    { to: '/editor', icon: FileCode, label: 'Caddyfile' },
+    { to: '/dns', icon: Shield, label: 'DNS Providers' },
     { to: '/logs', icon: FileText, label: '日志' },
     { to: '/users', icon: Users, label: '用户管理' },
     { to: '/audit', icon: ClipboardList, label: '审计日志' },

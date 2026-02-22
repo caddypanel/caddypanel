@@ -237,6 +237,33 @@ func (m *Manager) GetCaddyfileContent() (string, error) {
 	return string(data), nil
 }
 
+// Format formats a Caddyfile string using `caddy fmt`
+func (m *Manager) Format(content string) (string, error) {
+	cmd := exec.Command(m.cfg.CaddyBin, "fmt", "-")
+	cmd.Stdin = strings.NewReader(content)
+	output, err := cmd.Output()
+	if err != nil {
+		return content, nil // return original if formatting fails
+	}
+	return string(output), nil
+}
+
+// Validate validates a Caddyfile string using `caddy validate`
+func (m *Manager) Validate(content string) error {
+	tmpPath := m.cfg.CaddyfilePath + ".validate.tmp"
+	if err := os.WriteFile(tmpPath, []byte(content), 0644); err != nil {
+		return fmt.Errorf("failed to write temp file: %w", err)
+	}
+	defer os.Remove(tmpPath)
+
+	cmd := exec.Command(m.cfg.CaddyBin, "validate", "--config", tmpPath)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("%s", strings.TrimSpace(string(output)))
+	}
+	return nil
+}
+
 func (m *Manager) cleanupBackups(dir string, keep int) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {

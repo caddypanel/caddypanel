@@ -1,6 +1,7 @@
 package caddy
 
 import (
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
@@ -11,7 +12,7 @@ import (
 )
 
 // RenderCaddyfile generates a complete Caddyfile from the given hosts
-func RenderCaddyfile(hosts []model.Host, cfg *config.Config) string {
+func RenderCaddyfile(hosts []model.Host, cfg *config.Config, dnsProviders map[uint]model.DnsProvider) string {
 	var b strings.Builder
 
 	// Header
@@ -32,24 +33,47 @@ func RenderCaddyfile(hosts []model.Host, cfg *config.Config) string {
 		if host.Enabled != nil && !*host.Enabled {
 			continue
 		}
-		renderHostBlock(&b, host, cfg)
+		renderHostBlock(&b, host, cfg, dnsProviders)
 	}
 
 	return b.String()
 }
 
-func renderHostBlock(b *strings.Builder, host model.Host, cfg *config.Config) {
+func renderHostBlock(b *strings.Builder, host model.Host, cfg *config.Config, dnsProviders map[uint]model.DnsProvider) {
 	// Domain line
 	domain := host.Domain
-	if host.TLSEnabled != nil && !*host.TLSEnabled {
+	tlsMode := host.TLSMode
+	if tlsMode == "" {
+		tlsMode = "auto"
+	}
+
+	// Handle TLS mode for domain prefix
+	if tlsMode == "off" || (host.TLSEnabled != nil && !*host.TLSEnabled) {
 		domain = "http://" + domain
 	}
 
 	b.WriteString(fmt.Sprintf("%s {\n", domain))
 
-	// TLS — custom certificate
-	if host.CustomCertPath != "" && host.CustomKeyPath != "" {
-		b.WriteString(fmt.Sprintf("\ttls %s %s\n", host.CustomCertPath, host.CustomKeyPath))
+	// TLS configuration based on mode
+	switch tlsMode {
+	case "custom":
+		if host.CustomCertPath != "" && host.CustomKeyPath != "" {
+			b.WriteString(fmt.Sprintf("\ttls %s %s\n", host.CustomCertPath, host.CustomKeyPath))
+		}
+	case "dns", "wildcard":
+		if host.DnsProviderID != nil {
+			if p, ok := dnsProviders[*host.DnsProviderID]; ok {
+				renderDnsTLS(b, p)
+			}
+		}
+	case "off":
+		// no TLS block needed, http:// prefix handles it
+		// case "auto": default Caddy behavior, no tls block needed
+	}
+
+	// Response compression
+	if host.Compression != nil && *host.Compression {
+		renderCompression(b)
 	}
 
 	// Access rules (IP allow/deny) — must come before handlers
@@ -62,10 +86,24 @@ func renderHostBlock(b *strings.Builder, host model.Host, cfg *config.Config) {
 		renderBasicAuth(b, host.BasicAuths)
 	}
 
+	// CORS
+	if host.CorsEnabled != nil && *host.CorsEnabled {
+		renderCors(b, host)
+	}
+
+	// Security headers
+	if host.SecurityHeaders != nil && *host.SecurityHeaders {
+		renderSecurityHeaders(b)
+	}
+
 	// Render based on host type
 	switch host.HostType {
 	case "redirect":
 		renderRedirect(b, host)
+	case "static":
+		renderStaticHost(b, host)
+	case "php":
+		renderPHPHost(b, host)
 	default: // "proxy" or empty (backward compatible)
 		renderProxyHost(b, host)
 	}
@@ -75,6 +113,11 @@ func renderHostBlock(b *strings.Builder, host model.Host, cfg *config.Config) {
 		for _, line := range strings.Split(strings.TrimSpace(host.CustomDirectives), "\n") {
 			b.WriteString(fmt.Sprintf("\t%s\n", line))
 		}
+	}
+
+	// Custom error pages
+	if host.ErrorPagePath != "" {
+		renderErrorPages(b, host.ErrorPagePath)
 	}
 
 	// Per-host access log
@@ -215,4 +258,133 @@ func renderResponseHeaders(b *strings.Builder, headers []model.CustomHeader) {
 		}
 	}
 	b.WriteString("\t}\n")
+}
+
+func renderCompression(b *strings.Builder) {
+	b.WriteString("\tencode gzip zstd\n")
+}
+
+func renderCors(b *strings.Builder, host model.Host) {
+	origins := host.CorsOrigins
+	if origins == "" {
+		origins = "*"
+	}
+	methods := host.CorsMethods
+	if methods == "" {
+		methods = "GET, POST, PUT, DELETE, OPTIONS"
+	}
+	headers := host.CorsHeaders
+	if headers == "" {
+		headers = "Content-Type, Authorization"
+	}
+
+	// Preflight
+	b.WriteString("\t@cors_preflight method OPTIONS\n")
+	b.WriteString("\theader @cors_preflight {\n")
+	b.WriteString(fmt.Sprintf("\t\tAccess-Control-Allow-Origin \"%s\"\n", origins))
+	b.WriteString(fmt.Sprintf("\t\tAccess-Control-Allow-Methods \"%s\"\n", methods))
+	b.WriteString(fmt.Sprintf("\t\tAccess-Control-Allow-Headers \"%s\"\n", headers))
+	b.WriteString("\t\tAccess-Control-Max-Age \"86400\"\n")
+	b.WriteString("\t}\n")
+	b.WriteString("\trespond @cors_preflight 204\n")
+
+	// Normal response
+	b.WriteString(fmt.Sprintf("\theader Access-Control-Allow-Origin \"%s\"\n", origins))
+}
+
+func renderSecurityHeaders(b *strings.Builder) {
+	b.WriteString("\theader {\n")
+	b.WriteString("\t\tStrict-Transport-Security \"max-age=31536000; includeSubDomains; preload\"\n")
+	b.WriteString("\t\tX-Content-Type-Options \"nosniff\"\n")
+	b.WriteString("\t\tX-Frame-Options \"DENY\"\n")
+	b.WriteString("\t\tReferrer-Policy \"strict-origin-when-cross-origin\"\n")
+	b.WriteString("\t\tX-XSS-Protection \"1; mode=block\"\n")
+	b.WriteString("\t\tPermissions-Policy \"camera=(), microphone=(), geolocation=()\"\n")
+	b.WriteString("\t}\n")
+}
+
+func renderErrorPages(b *strings.Builder, errorPagePath string) {
+	b.WriteString("\thandle_errors {\n")
+	for _, code := range []int{404, 502, 503} {
+		b.WriteString(fmt.Sprintf("\t\t@%d expression {err.status_code} == %d\n", code, code))
+		b.WriteString(fmt.Sprintf("\t\thandle @%d {\n", code))
+		b.WriteString(fmt.Sprintf("\t\t\troot * %s\n", errorPagePath))
+		b.WriteString(fmt.Sprintf("\t\t\trewrite * /%d.html\n", code))
+		b.WriteString("\t\t\tfile_server\n")
+		b.WriteString("\t\t}\n")
+	}
+	b.WriteString("\t}\n")
+}
+
+func renderStaticHost(b *strings.Builder, host model.Host) {
+	b.WriteString(fmt.Sprintf("\troot * %s\n", host.RootPath))
+	if host.IndexFiles != "" {
+		b.WriteString(fmt.Sprintf("\ttry_files {path} %s\n", host.IndexFiles))
+	}
+	if host.DirectoryBrowse != nil && *host.DirectoryBrowse {
+		b.WriteString("\tfile_server browse\n")
+	} else {
+		b.WriteString("\tfile_server\n")
+	}
+}
+
+func renderPHPHost(b *strings.Builder, host model.Host) {
+	b.WriteString(fmt.Sprintf("\troot * %s\n", host.RootPath))
+	fastcgi := host.PHPFastCGI
+	if fastcgi == "" {
+		fastcgi = "localhost:9000"
+	}
+	b.WriteString(fmt.Sprintf("\tphp_fastcgi %s\n", fastcgi))
+	b.WriteString("\tfile_server\n")
+}
+
+func renderDnsTLS(b *strings.Builder, p model.DnsProvider) {
+	// Parse JSON config to extract API token/key
+	var cfg map[string]string
+	if err := json.Unmarshal([]byte(p.Config), &cfg); err != nil {
+		return // skip if config is invalid
+	}
+
+	// Map provider to Caddy module name and config key
+	switch p.Provider {
+	case "cloudflare":
+		token := cfg["api_token"]
+		if token == "" {
+			return
+		}
+		b.WriteString("\ttls {\n")
+		b.WriteString("\t\tdns cloudflare " + token + "\n")
+		b.WriteString("\t}\n")
+	case "alidns":
+		ak := cfg["access_key_id"]
+		sk := cfg["access_key_secret"]
+		if ak == "" || sk == "" {
+			return
+		}
+		b.WriteString("\ttls {\n")
+		b.WriteString(fmt.Sprintf("\t\tdns alidns {\n\t\t\taccess_key_id %s\n\t\t\taccess_key_secret %s\n\t\t}\n", ak, sk))
+		b.WriteString("\t}\n")
+	case "tencentcloud":
+		sid := cfg["secret_id"]
+		sk := cfg["secret_key"]
+		if sid == "" || sk == "" {
+			return
+		}
+		b.WriteString("\ttls {\n")
+		b.WriteString(fmt.Sprintf("\t\tdns tencentcloud {\n\t\t\tsecret_id %s\n\t\t\tsecret_key %s\n\t\t}\n", sid, sk))
+		b.WriteString("\t}\n")
+	case "route53":
+		region := cfg["region"]
+		ak := cfg["access_key_id"]
+		sk := cfg["secret_access_key"]
+		if ak == "" || sk == "" {
+			return
+		}
+		if region == "" {
+			region = "us-east-1"
+		}
+		b.WriteString("\ttls {\n")
+		b.WriteString(fmt.Sprintf("\t\tdns route53 {\n\t\t\tregion %s\n\t\t\taccess_key_id %s\n\t\t\tsecret_access_key %s\n\t\t}\n", region, ak, sk))
+		b.WriteString("\t}\n")
+	}
 }

@@ -2,13 +2,13 @@ import { useState, useEffect, useCallback } from 'react'
 import {
     Box, Flex, Heading, Text, Button, Badge, Switch, Table, Dialog,
     TextField, Callout, IconButton, Card, Tooltip, Spinner, AlertDialog,
-    Select, Tabs,
+    Select, Tabs, Separator,
 } from '@radix-ui/themes'
 import {
     Plus, Pencil, Trash2, Globe, AlertCircle, X, ChevronRight,
     ArrowRightLeft, Shield, Lock,
 } from 'lucide-react'
-import { hostAPI } from '../api/index.js'
+import { hostAPI, dnsProviderAPI } from '../api/index.js'
 
 const DEFAULT_FORM = {
     domain: '',
@@ -24,14 +24,30 @@ const DEFAULT_FORM = {
     access_rules: [],
     basic_auths: [],
     custom_directives: '',
+    compression: false,
+    cors_enabled: false,
+    cors_origins: '*',
+    cors_methods: 'GET, POST, PUT, DELETE, OPTIONS',
+    cors_headers: 'Content-Type, Authorization',
+    security_headers: false,
+    error_page_path: '',
+    cache_enabled: false,
+    cache_ttl: 300,
+    tls_mode: 'auto',
+    dns_provider_id: null,
 }
 
 // ============ Host Form Dialog ============
-function HostFormDialog({ open, onClose, host, onSaved }) {
-    const isEdit = !!host
+function HostFormDialog({ open, onClose, onSaved, host }) {
     const [form, setForm] = useState({ ...DEFAULT_FORM })
-    const [error, setError] = useState('')
     const [saving, setSaving] = useState(false)
+    const [error, setError] = useState('')
+    const [dnsProviders, setDnsProviders] = useState([])
+    const isEdit = !!host
+
+    useEffect(() => {
+        dnsProviderAPI.list().then(res => setDnsProviders(res.data.providers || [])).catch(() => { })
+    }, [])
 
     useEffect(() => {
         if (host) {
@@ -51,6 +67,17 @@ function HostFormDialog({ open, onClose, host, onSaved }) {
                 access_rules: host.access_rules || [],
                 basic_auths: [], // never pre-fill passwords
                 custom_directives: host.custom_directives || '',
+                compression: host.compression || false,
+                cors_enabled: host.cors_enabled || false,
+                cors_origins: host.cors_origins || '*',
+                cors_methods: host.cors_methods || 'GET, POST, PUT, DELETE, OPTIONS',
+                cors_headers: host.cors_headers || 'Content-Type, Authorization',
+                security_headers: host.security_headers || false,
+                error_page_path: host.error_page_path || '',
+                cache_enabled: host.cache_enabled || false,
+                cache_ttl: host.cache_ttl || 300,
+                tls_mode: host.tls_mode || 'auto',
+                dns_provider_id: host.dns_provider_id || null,
             })
         } else {
             setForm({ ...DEFAULT_FORM })
@@ -107,6 +134,10 @@ function HostFormDialog({ open, onClose, host, onSaved }) {
     }
 
     const isProxy = form.host_type === 'proxy'
+    const isStatic = form.host_type === 'static'
+    const isPHP = form.host_type === 'php'
+    const isRedirect = form.host_type === 'redirect'
+    const needsRoot = isStatic || isPHP
 
     return (
         <Dialog.Root open={open} onOpenChange={(o) => !o && onClose()}>
@@ -115,7 +146,7 @@ function HostFormDialog({ open, onClose, host, onSaved }) {
                     {isEdit ? 'Edit Host' : 'New Host'}
                 </Dialog.Title>
                 <Dialog.Description size="2" color="gray" mb="4">
-                    {isProxy ? 'Configure a reverse proxy host' : 'Configure a redirect host'}
+                    {isProxy ? '配置反向代理' : isRedirect ? '配置域名跳转' : isStatic ? '配置静态网站托管' : '配置 PHP 站点'}
                 </Dialog.Description>
 
                 <Flex direction="column" gap="4">
@@ -137,8 +168,10 @@ function HostFormDialog({ open, onClose, host, onSaved }) {
                             >
                                 <Select.Trigger />
                                 <Select.Content>
-                                    <Select.Item value="proxy">Proxy</Select.Item>
-                                    <Select.Item value="redirect">Redirect</Select.Item>
+                                    <Select.Item value="proxy">反向代理</Select.Item>
+                                    <Select.Item value="redirect">域名跳转</Select.Item>
+                                    <Select.Item value="static">静态网站</Select.Item>
+                                    <Select.Item value="php">PHP 站点</Select.Item>
                                 </Select.Content>
                             </Select.Root>
                         </Flex>
@@ -156,7 +189,7 @@ function HostFormDialog({ open, onClose, host, onSaved }) {
                     <Tabs.Root defaultValue="main">
                         <Tabs.List>
                             <Tabs.Trigger value="main">
-                                {isProxy ? 'Upstream' : 'Redirect'}
+                                {isProxy ? 'Upstream' : isRedirect ? 'Redirect' : '配置'}
                             </Tabs.Trigger>
                             <Tabs.Trigger value="options">Options</Tabs.Trigger>
                             <Tabs.Trigger value="auth">
@@ -199,7 +232,7 @@ function HostFormDialog({ open, onClose, host, onSaved }) {
                                             </Flex>
                                         ))}
                                     </Flex>
-                                ) : (
+                                ) : isRedirect ? (
                                     /* Redirect: Target URL + Code */
                                     <Flex direction="column" gap="3">
                                         <Flex direction="column" gap="1">
@@ -229,6 +262,58 @@ function HostFormDialog({ open, onClose, host, onSaved }) {
                                             </Select.Root>
                                         </Flex>
                                     </Flex>
+                                ) : (
+                                    /* Static / PHP: Root path + options */
+                                    <Flex direction="column" gap="3">
+                                        <Flex direction="column" gap="1">
+                                            <Text size="2" weight="medium">根目录</Text>
+                                            <TextField.Root
+                                                placeholder="/var/www/my-site"
+                                                value={form.root_path || ''}
+                                                onChange={(e) => setForm({ ...form, root_path: e.target.value })}
+                                                size="2"
+                                            />
+                                            <Text size="1" color="gray">
+                                                {isStatic ? '静态文件所在的服务器目录' : 'PHP 站点根目录（如 WordPress）'}
+                                            </Text>
+                                        </Flex>
+                                        {isPHP && (
+                                            <Flex direction="column" gap="1">
+                                                <Text size="2" weight="medium">PHP-FPM 地址</Text>
+                                                <TextField.Root
+                                                    placeholder="localhost:9000"
+                                                    value={form.php_fastcgi || ''}
+                                                    onChange={(e) => setForm({ ...form, php_fastcgi: e.target.value })}
+                                                    size="2"
+                                                />
+                                                <Text size="1" color="gray">
+                                                    PHP-FPM 监听地址，默认 localhost:9000
+                                                </Text>
+                                            </Flex>
+                                        )}
+                                        {isStatic && (
+                                            <Flex justify="between" align="center">
+                                                <Flex direction="column">
+                                                    <Text size="2" weight="medium">目录浏览</Text>
+                                                    <Text size="1" color="gray">允许查看目录列表</Text>
+                                                </Flex>
+                                                <Switch
+                                                    checked={form.directory_browse || false}
+                                                    onCheckedChange={(v) => setForm({ ...form, directory_browse: v })}
+                                                />
+                                            </Flex>
+                                        )}
+                                        <Flex direction="column" gap="1">
+                                            <Text size="2" weight="medium">首页文件</Text>
+                                            <TextField.Root
+                                                placeholder="index.html index.htm"
+                                                value={form.index_files || ''}
+                                                onChange={(e) => setForm({ ...form, index_files: e.target.value })}
+                                                size="2"
+                                            />
+                                            <Text size="1" color="gray">空格分隔，留空使用默认</Text>
+                                        </Flex>
+                                    </Flex>
                                 )}
                             </Box>
                         </Tabs.Content>
@@ -239,14 +324,47 @@ function HostFormDialog({ open, onClose, host, onSaved }) {
                                 <Flex direction="column" gap="3" p="1">
                                     <Flex justify="between" align="center">
                                         <Flex direction="column">
-                                            <Text size="2" weight="medium">HTTPS (TLS)</Text>
-                                            <Text size="1" color="gray">Auto-obtain Let's Encrypt certificate</Text>
+                                            <Text size="2" weight="medium">TLS 模式</Text>
+                                            <Text size="1" color="gray">选择证书获取方式</Text>
                                         </Flex>
-                                        <Switch
-                                            checked={form.tls_enabled}
-                                            onCheckedChange={(v) => setForm({ ...form, tls_enabled: v })}
-                                        />
+                                        <Select.Root
+                                            value={form.tls_mode || 'auto'}
+                                            onValueChange={(v) => setForm({ ...form, tls_mode: v, tls_enabled: v !== 'off' })}
+                                            size="2"
+                                        >
+                                            <Select.Trigger style={{ width: 160 }} />
+                                            <Select.Content>
+                                                <Select.Item value="auto">自动 (Let's Encrypt)</Select.Item>
+                                                <Select.Item value="dns">DNS Challenge</Select.Item>
+                                                <Select.Item value="wildcard">通配符证书</Select.Item>
+                                                <Select.Item value="custom">自定义证书</Select.Item>
+                                                <Select.Item value="off">关闭 TLS</Select.Item>
+                                            </Select.Content>
+                                        </Select.Root>
                                     </Flex>
+
+                                    {(form.tls_mode === 'dns' || form.tls_mode === 'wildcard') && (
+                                        <Flex direction="column" gap="1" pl="4" style={{ borderLeft: '2px solid #27272a' }}>
+                                            <Text size="1" color="gray">DNS Provider</Text>
+                                            <Select.Root
+                                                value={form.dns_provider_id ? String(form.dns_provider_id) : ''}
+                                                onValueChange={(v) => setForm({ ...form, dns_provider_id: v ? Number(v) : null })}
+                                                size="2"
+                                            >
+                                                <Select.Trigger placeholder="选择 DNS Provider" />
+                                                <Select.Content>
+                                                    {dnsProviders.map(p => (
+                                                        <Select.Item key={p.id} value={String(p.id)}>
+                                                            {p.name} ({p.provider})
+                                                        </Select.Item>
+                                                    ))}
+                                                </Select.Content>
+                                            </Select.Root>
+                                            {dnsProviders.length === 0 && (
+                                                <Text size="1" color="red">请先在 DNS Providers 页面添加 Provider</Text>
+                                            )}
+                                        </Flex>
+                                    )}
 
                                     <Flex justify="between" align="center">
                                         <Flex direction="column">
@@ -273,6 +391,91 @@ function HostFormDialog({ open, onClose, host, onSaved }) {
                                     )}
 
                                     <Separator size="4" style={{ opacity: 0.15 }} />
+                                    <Text size="2" weight="bold" style={{ color: '#a1a1aa' }}>性能</Text>
+
+                                    <Flex justify="between" align="center">
+                                        <Flex direction="column">
+                                            <Text size="2" weight="medium">响应压缩</Text>
+                                            <Text size="1" color="gray">启用 gzip + zstd 压缩</Text>
+                                        </Flex>
+                                        <Switch
+                                            checked={form.compression}
+                                            onCheckedChange={(v) => setForm({ ...form, compression: v })}
+                                        />
+                                    </Flex>
+
+                                    <Separator size="4" style={{ opacity: 0.15 }} />
+                                    <Text size="2" weight="bold" style={{ color: '#a1a1aa' }}>安全</Text>
+
+                                    <Flex justify="between" align="center">
+                                        <Flex direction="column">
+                                            <Text size="2" weight="medium">安全响应头</Text>
+                                            <Text size="1" color="gray">HSTS / X-Frame-Options / CSP 等</Text>
+                                        </Flex>
+                                        <Switch
+                                            checked={form.security_headers}
+                                            onCheckedChange={(v) => setForm({ ...form, security_headers: v })}
+                                        />
+                                    </Flex>
+
+                                    <Flex justify="between" align="center">
+                                        <Flex direction="column">
+                                            <Text size="2" weight="medium">CORS 跨域</Text>
+                                            <Text size="1" color="gray">允许跨域请求</Text>
+                                        </Flex>
+                                        <Switch
+                                            checked={form.cors_enabled}
+                                            onCheckedChange={(v) => setForm({ ...form, cors_enabled: v })}
+                                        />
+                                    </Flex>
+
+                                    {form.cors_enabled && (
+                                        <Flex direction="column" gap="2" pl="4" style={{ borderLeft: '2px solid #27272a' }}>
+                                            <Box>
+                                                <Text size="1" color="gray" mb="1">允许的源（逗号分隔）</Text>
+                                                <TextField.Root
+                                                    value={form.cors_origins}
+                                                    onChange={(e) => setForm({ ...form, cors_origins: e.target.value })}
+                                                    placeholder="* 或 https://example.com"
+                                                />
+                                            </Box>
+                                            <Box>
+                                                <Text size="1" color="gray" mb="1">允许的方法</Text>
+                                                <TextField.Root
+                                                    value={form.cors_methods}
+                                                    onChange={(e) => setForm({ ...form, cors_methods: e.target.value })}
+                                                    placeholder="GET, POST, PUT, DELETE, OPTIONS"
+                                                />
+                                            </Box>
+                                            <Box>
+                                                <Text size="1" color="gray" mb="1">允许的请求头</Text>
+                                                <TextField.Root
+                                                    value={form.cors_headers}
+                                                    onChange={(e) => setForm({ ...form, cors_headers: e.target.value })}
+                                                    placeholder="Content-Type, Authorization"
+                                                />
+                                            </Box>
+                                        </Flex>
+                                    )}
+
+                                    <Separator size="4" style={{ opacity: 0.15 }} />
+                                    <Text size="2" weight="bold" style={{ color: '#a1a1aa' }}>错误页</Text>
+
+                                    <Box>
+                                        <Text size="2" weight="medium" mb="1">自定义错误页目录</Text>
+                                        <Text size="1" color="gray" mb="2" as="p">
+                                            放置 404.html / 502.html / 503.html 的目录路径
+                                        </Text>
+                                        <TextField.Root
+                                            value={form.error_page_path}
+                                            onChange={(e) => setForm({ ...form, error_page_path: e.target.value })}
+                                            placeholder="/var/lib/caddypanel/error_pages"
+                                        />
+                                    </Box>
+
+                                    <Separator size="4" style={{ opacity: 0.15 }} />
+                                    <Text size="2" weight="bold" style={{ color: '#a1a1aa' }}>高级</Text>
+
                                     <Box>
                                         <Text size="2" weight="medium" mb="1">自定义 Caddy 指令</Text>
                                         <Text size="1" color="gray" mb="2" as="p">
@@ -481,6 +684,20 @@ export default function HostList() {
                 </Flex>
             )
         }
+        if (host.host_type === 'static') {
+            return (
+                <Flex align="center" gap="1">
+                    <Text size="1" color="gray">📂 {host.root_path || '-'}</Text>
+                </Flex>
+            )
+        }
+        if (host.host_type === 'php') {
+            return (
+                <Flex align="center" gap="1">
+                    <Text size="1" color="gray">🐘 {host.root_path || '-'} → {host.php_fastcgi || 'localhost:9000'}</Text>
+                </Flex>
+            )
+        }
         return (
             <Flex direction="column" gap="1">
                 {(host.upstreams || []).map((u, i) => (
@@ -544,6 +761,10 @@ export default function HostList() {
                                         <Flex align="center" gap="2">
                                             {host.host_type === 'redirect' ? (
                                                 <ArrowRightLeft size={14} color="#f59e0b" />
+                                            ) : host.host_type === 'static' ? (
+                                                <Globe size={14} color="#3b82f6" />
+                                            ) : host.host_type === 'php' ? (
+                                                <Globe size={14} color="#8b5cf6" />
                                             ) : (
                                                 <Globe size={14} color="#10b981" />
                                             )}

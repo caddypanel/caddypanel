@@ -9,6 +9,8 @@ import Logs from './pages/Logs.jsx'
 import Settings from './pages/Settings.jsx'
 import Users from './pages/Users.jsx'
 import AuditLogs from './pages/AuditLogs.jsx'
+import CaddyfileEditor from './pages/CaddyfileEditor.jsx'
+import DnsProviders from './pages/DnsProviders.jsx'
 
 function ProtectedRoute({ children }) {
     const token = useAuthStore((s) => s.token)
@@ -41,6 +43,8 @@ export default function App() {
                     <Route path="logs" element={<Logs />} />
                     <Route path="users" element={<Users />} />
                     <Route path="audit" element={<AuditLogs />} />
+                    <Route path="editor" element={<CaddyfileEditor />} />
+                    <Route path="dns" element={<DnsProviders />} />
                     <Route path="settings" element={<Settings />} />
                 </Route>
                 <Route path="*" element={<Navigate to="/" replace />} />

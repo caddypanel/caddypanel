@@ -56,6 +56,9 @@ export const caddyAPI = {
     stop: () => api.post('/caddy/stop'),
     reload: () => api.post('/caddy/reload'),
     caddyfile: () => api.get('/caddy/caddyfile'),
+    saveCaddyfile: (content, reload = false) => api.post('/caddy/caddyfile', { content, reload }),
+    format: (content) => api.post('/caddy/fmt', { content }),
+    validate: (content) => api.post('/caddy/validate', { content }),
 }
 
 // ============ Logs ============
@@ -87,6 +90,15 @@ export const userAPI = {
 // ============ Audit ============
 export const auditAPI = {
     list: (params) => api.get('/audit/logs', { params }),
+}
+
+// ============ DNS Providers ============
+export const dnsProviderAPI = {
+    list: () => api.get('/dns-providers'),
+    get: (id) => api.get(`/dns-providers/${id}`),
+    create: (data) => api.post('/dns-providers', data),
+    update: (id, data) => api.put(`/dns-providers/${id}`, data),
+    delete: (id) => api.delete(`/dns-providers/${id}`),
 }
 
 export default api

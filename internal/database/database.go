@@ -33,6 +33,7 @@ func Init(dbPath string) *gorm.DB {
 		&model.AccessRule{},
 		&model.BasicAuth{},
 		&model.AuditLog{},
+		&model.DnsProvider{},
 	)
 	if err != nil {
 		log.Fatalf("Failed to migrate database: %v", err)

@@ -52,18 +52,27 @@ func (s *HostService) Create(req *model.HostCreateRequest) (*model.Host, error) 
 	}
 
 	hostType := stringOrDefault(req.HostType, "proxy")
-	if hostType != "proxy" && hostType != "redirect" {
-		return nil, fmt.Errorf("invalid host_type: %s (must be 'proxy' or 'redirect')", hostType)
+	if hostType != "proxy" && hostType != "redirect" && hostType != "static" && hostType != "php" {
+		return nil, fmt.Errorf("invalid host_type: %s (must be 'proxy', 'redirect', 'static', or 'php')", hostType)
 	}
 
 	// Validate based on type
-	if hostType == "redirect" {
+	switch hostType {
+	case "redirect":
 		if req.RedirectURL == "" {
 			return nil, fmt.Errorf("redirect_url is required for redirect hosts")
 		}
-	} else {
+	case "proxy":
 		if len(req.Upstreams) == 0 {
 			return nil, fmt.Errorf("at least one upstream is required for proxy hosts")
+		}
+	case "static":
+		if req.RootPath == "" {
+			return nil, fmt.Errorf("root_path is required for static hosts")
+		}
+	case "php":
+		if req.RootPath == "" {
+			return nil, fmt.Errorf("root_path is required for PHP hosts")
 		}
 	}
 
@@ -76,6 +85,21 @@ func (s *HostService) Create(req *model.HostCreateRequest) (*model.Host, error) 
 		WebSocket:        boolPtr(boolOrDefault(req.WebSocket, false)),
 		RedirectURL:      req.RedirectURL,
 		RedirectCode:     intOrDefault(req.RedirectCode, 301),
+		Compression:      boolPtr(boolOrDefault(req.Compression, false)),
+		CacheEnabled:     boolPtr(boolOrDefault(req.CacheEnabled, false)),
+		CacheTTL:         intOrDefault(req.CacheTTL, 300),
+		CorsEnabled:      boolPtr(boolOrDefault(req.CorsEnabled, false)),
+		CorsOrigins:      req.CorsOrigins,
+		CorsMethods:      req.CorsMethods,
+		CorsHeaders:      req.CorsHeaders,
+		SecurityHeaders:  boolPtr(boolOrDefault(req.SecurityHeaders, false)),
+		ErrorPagePath:    req.ErrorPagePath,
+		RootPath:         req.RootPath,
+		DirectoryBrowse:  boolPtr(boolOrDefault(req.DirectoryBrowse, false)),
+		PHPFastCGI:       req.PHPFastCGI,
+		IndexFiles:       req.IndexFiles,
+		TLSMode:          stringOrDefault(req.TLSMode, "auto"),
+		DnsProviderID:    req.DnsProviderID,
 		CustomDirectives: req.CustomDirectives,
 	}
 
@@ -163,6 +187,25 @@ func (s *HostService) Update(id uint, req *model.HostCreateRequest) (*model.Host
 		host.RedirectCode = req.RedirectCode
 	}
 	host.CustomDirectives = req.CustomDirectives
+	host.Compression = boolPtr(boolOrDefault(req.Compression, boolVal(host.Compression)))
+	host.CacheEnabled = boolPtr(boolOrDefault(req.CacheEnabled, boolVal(host.CacheEnabled)))
+	if req.CacheTTL > 0 {
+		host.CacheTTL = req.CacheTTL
+	}
+	host.CorsEnabled = boolPtr(boolOrDefault(req.CorsEnabled, boolVal(host.CorsEnabled)))
+	host.CorsOrigins = req.CorsOrigins
+	host.CorsMethods = req.CorsMethods
+	host.CorsHeaders = req.CorsHeaders
+	host.SecurityHeaders = boolPtr(boolOrDefault(req.SecurityHeaders, boolVal(host.SecurityHeaders)))
+	host.ErrorPagePath = req.ErrorPagePath
+	host.RootPath = req.RootPath
+	host.DirectoryBrowse = boolPtr(boolOrDefault(req.DirectoryBrowse, boolVal(host.DirectoryBrowse)))
+	host.PHPFastCGI = req.PHPFastCGI
+	host.IndexFiles = req.IndexFiles
+	if req.TLSMode != "" {
+		host.TLSMode = req.TLSMode
+	}
+	host.DnsProviderID = req.DnsProviderID
 
 	// Replace associations
 	s.db.Where("host_id = ?", id).Delete(&model.Upstream{})
@@ -287,7 +330,15 @@ func (s *HostService) ApplyConfig() error {
 		return fmt.Errorf("failed to list hosts: %w", err)
 	}
 
-	content := caddy.RenderCaddyfile(hosts, s.cfg)
+	// Preload DNS providers for TLS rendering
+	var providers []model.DnsProvider
+	s.db.Find(&providers)
+	dnsMap := make(map[uint]model.DnsProvider, len(providers))
+	for _, p := range providers {
+		dnsMap[p.ID] = p
+	}
+
+	content := caddy.RenderCaddyfile(hosts, s.cfg, dnsMap)
 
 	if err := s.caddyMgr.WriteCaddyfile(content); err != nil {
 		return fmt.Errorf("failed to write Caddyfile: %w", err)

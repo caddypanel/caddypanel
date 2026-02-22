@@ -92,6 +92,9 @@ func main() {
 	protected.POST("/caddy/stop", caddyH.Stop)
 	protected.POST("/caddy/reload", caddyH.Reload)
 	protected.GET("/caddy/caddyfile", caddyH.GetCaddyfile)
+	protected.POST("/caddy/caddyfile", caddyH.SaveCaddyfile)
+	protected.POST("/caddy/fmt", caddyH.Format)
+	protected.POST("/caddy/validate", caddyH.Validate)
 
 	// Log viewing
 	logH := handler.NewLogHandler(cfg)
@@ -114,6 +117,14 @@ func main() {
 	// Audit logs
 	auditH := handler.NewAuditHandler(db)
 	protected.GET("/audit/logs", auditH.List)
+
+	// DNS providers
+	dnsH := handler.NewDnsProviderHandler(db)
+	protected.GET("/dns-providers", dnsH.List)
+	protected.GET("/dns-providers/:id", dnsH.Get)
+	protected.POST("/dns-providers", dnsH.Create)
+	protected.PUT("/dns-providers/:id", dnsH.Update)
+	protected.DELETE("/dns-providers/:id", dnsH.Delete)
 
 	// ============ Frontend Static Files ============
 	setupFrontend(r)
