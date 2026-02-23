@@ -25,9 +25,9 @@ set -euo pipefail
 if [[ -f "$(dirname "${BASH_SOURCE[0]}")/VERSION" ]]; then
     CADDYPANEL_VERSION="$(cat "$(dirname "${BASH_SOURCE[0]}")/VERSION" | tr -d '[:space:]')"
 elif command -v curl &>/dev/null; then
-    CADDYPANEL_VERSION="$(curl -fsSL https://api.github.com/repos/caddypanel/caddypanel/releases/latest 2>/dev/null | grep -oP '"tag_name":\s*"v?\K[^"]+' || echo "0.3.0")"
+    CADDYPANEL_VERSION="$(curl -fsSL https://api.github.com/repos/caddypanel/caddypanel/releases/latest 2>/dev/null | grep -oP '"tag_name":\s*"v?\K[^"]+' || echo "0.4.0")"
 else
-    CADDYPANEL_VERSION="0.3.0"
+    CADDYPANEL_VERSION="0.4.0"
 fi
 GITHUB_REPO="caddypanel/caddypanel"
 INSTALL_DIR="/usr/local/bin"

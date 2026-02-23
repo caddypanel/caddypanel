@@ -8,8 +8,8 @@
 
 ## 📍 项目当前状态
 
-- **版本**: `0.3.1` (定义在 `/VERSION`，唯一真相源)
-- **阶段**: Phase 4 全部完成，尚无 Phase 5 计划
+- **版本**: `0.4.0` (定义在 `/VERSION`，唯一真相源)
+- **阶段**: Phase 5 完成（安全增强与主题系统）
 - **构建状态**: ✅ `go build` + `npm run build` 通过
 - **开发方式**: AI Vibe Coding (Gemini 2.5 Pro + Antigravity Agent)
 - **语言**: 项目文档和注释以中文为主，代码以英文为主
@@ -40,6 +40,7 @@ Go(Gin) + React19(Vite7) 单二进制面板，管理 Caddy 反代。DB → `Rend
 2026-02-22 Phase 4.4  Caddyfile 编辑器：CodeMirror 6 + format/validate/save
 2026-02-22 Phase 4.1  DNS Provider：Cloudflare/阿里云/腾讯云/Route53 + TLS 5 模式
 2026-02-23 v0.3.1     统一版本管理机制、文档全面更新
+2026-02-23 v0.4.0     安全增强（登录限速/滑块验证）、主题系统重构（CSS变量）、证书管理
 ```
 
 ## ⚠️ 重要约定（必须遵守）
