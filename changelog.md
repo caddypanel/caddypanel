@@ -6,6 +6,14 @@
 
 ---
 
+## [0.4.2] - 2026-02-23
+
+### Fixed
+- 🐛 修复 Settings 页面缺少 `TextField` 组件隐式导入导致页面崩溃白屏的问题
+- 🐛 修复 `index.css` 由于 `@font-face` 语法错误使用 Google Fonts CSS 地址造成的 OTS 解析报错，改用标准 `@import` 加载字体
+
+---
+
 ## [0.4.1] - 2026-02-23
 
 ### Fixed
