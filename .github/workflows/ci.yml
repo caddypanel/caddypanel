@@ -146,9 +146,15 @@ jobs:
 
       - name: 'Test: Login'
         run: |
+          # First, get a slider challenge
+          CHALLENGE=$(curl -sf http://localhost:$PANEL_PORT/api/auth/challenge)
+          CHALLENGE_TOKEN=$(echo "$CHALLENGE" | jq -r '.token')
+          CHALLENGE_TARGET=$(echo "$CHALLENGE" | jq -r '.target')
+          echo "Challenge token: ${CHALLENGE_TOKEN:0:8}..., target: $CHALLENGE_TARGET"
+
           RESPONSE=$(curl -sf -X POST http://localhost:$PANEL_PORT/api/auth/login \
             -H 'Content-Type: application/json' \
-            -d '{"username":"admin","password":"testpassword123"}')
+            -d "{\"username\":\"admin\",\"password\":\"testpassword123\",\"challenge_token\":\"$CHALLENGE_TOKEN\",\"slider_value\":$CHALLENGE_TARGET}")
           TOKEN=$(echo "$RESPONSE" | jq -r '.token')
           echo "TOKEN=$TOKEN" >> $GITHUB_ENV
           echo "✅ Login succeeded"
