@@ -162,80 +162,19 @@ body {
   word-break: break-all;
 }
 
-/* ---- Slider Captcha ---- */
-.slider-captcha {
-  position: relative;
-  width: 100%;
-  height: 40px;
-  border-radius: 8px;
-  background: var(--cp-input-bg);
-  border: 1px solid var(--cp-border);
-  overflow: hidden;
-  user-select: none;
-  touch-action: none;
+/* ---- ALTCHA Widget Theme ---- */
+altcha-widget {
+  --altcha-max-width: 100%;
+  --altcha-color-base: var(--cp-text);
+  --altcha-color-text: var(--cp-text);
+  --altcha-color-border: var(--cp-border);
+  --altcha-color-border-focus: #10b981;
+  --altcha-color-footer-bg: transparent;
 }
 
-.slider-captcha-track {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: var(--cp-text-muted);
-  font-size: 0.75rem;
-  pointer-events: none;
-}
-
-.slider-captcha-fill {
-  position: absolute;
-  left: 0;
-  top: 0;
-  height: 100%;
-  background: linear-gradient(90deg, rgba(16, 185, 129, 0.15), rgba(16, 185, 129, 0.25));
-  border-radius: 8px 0 0 8px;
-  transition: none;
-}
-
-.slider-captcha-thumb {
-  position: absolute;
-  top: 2px;
-  width: 36px;
-  height: 36px;
-  border-radius: 6px;
-  background: var(--cp-card);
-  border: 2px solid var(--cp-border);
-  box-shadow: var(--cp-shadow);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: grab;
-  transition: border-color 0.15s;
-}
-
-.slider-captcha-thumb:hover {
-  border-color: #10b981;
-}
-
-.slider-captcha-thumb:active {
-  cursor: grabbing;
-}
-
-.slider-captcha-target {
-  position: absolute;
-  top: 6px;
-  width: 4px;
-  height: 28px;
-  border-radius: 2px;
-  background: #10b981;
-  opacity: 0.6;
-}
-
-.slider-captcha.success .slider-captcha-fill {
-  background: linear-gradient(90deg, rgba(16, 185, 129, 0.2), rgba(16, 185, 129, 0.4));
-}
-
-.slider-captcha.success .slider-captcha-thumb {
-  border-color: #10b981;
-  background: #10b981;
-  color: white;
+.dark-theme altcha-widget {
+  --altcha-color-base: var(--cp-text);
+  --altcha-color-text: var(--cp-text);
+  --altcha-color-border: var(--cp-border);
+  --altcha-color-border-focus: #10b981;
 }

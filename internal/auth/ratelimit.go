@@ -1,8 +1,6 @@
 package auth
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"math"
 	"sync"
 	"time"
@@ -104,90 +102,4 @@ func (rl *RateLimiter) cleanup() {
 			delete(rl.attempts, ip)
 		}
 	}
-}
-
-// ============ Challenge Store ============
-
-// ChallengeStore manages server-verified slider challenges
-type ChallengeStore struct {
-	mu         sync.Mutex
-	challenges map[string]*Challenge
-}
-
-// Challenge represents a slider verification challenge
-type Challenge struct {
-	Token    string    `json:"token"`
-	Target   int       `json:"target"`   // 0-100
-	CreateAt time.Time `json:"-"`
-}
-
-// NewChallengeStore creates a new challenge store
-func NewChallengeStore() *ChallengeStore {
-	cs := &ChallengeStore{challenges: make(map[string]*Challenge)}
-	go func() {
-		for {
-			time.Sleep(time.Minute)
-			cs.cleanup()
-		}
-	}()
-	return cs
-}
-
-// Generate creates a new challenge
-func (cs *ChallengeStore) Generate() *Challenge {
-	cs.mu.Lock()
-	defer cs.mu.Unlock()
-
-	token := generateToken()
-	// Random target between 20-80 (avoid edges)
-	b := make([]byte, 1)
-	rand.Read(b)
-	target := 20 + int(b[0])%61
-
-	ch := &Challenge{Token: token, Target: target, CreateAt: time.Now()}
-	cs.challenges[token] = ch
-	return ch
-}
-
-// Verify checks a challenge (one-time use, 60s expiry, ±5 tolerance)
-func (cs *ChallengeStore) Verify(token string, value int) bool {
-	cs.mu.Lock()
-	defer cs.mu.Unlock()
-
-	ch, ok := cs.challenges[token]
-	if !ok {
-		return false
-	}
-
-	// Always delete (one-time use)
-	delete(cs.challenges, token)
-
-	// Check expiry (60 seconds)
-	if time.Since(ch.CreateAt) > 60*time.Second {
-		return false
-	}
-
-	// Check value within ±5 tolerance
-	diff := ch.Target - value
-	if diff < 0 {
-		diff = -diff
-	}
-	return diff <= 5
-}
-
-func (cs *ChallengeStore) cleanup() {
-	cs.mu.Lock()
-	defer cs.mu.Unlock()
-	cutoff := time.Now().Add(-60 * time.Second)
-	for token, ch := range cs.challenges {
-		if ch.CreateAt.Before(cutoff) {
-			delete(cs.challenges, token)
-		}
-	}
-}
-
-func generateToken() string {
-	b := make([]byte, 16)
-	rand.Read(b)
-	return hex.EncodeToString(b)
 }

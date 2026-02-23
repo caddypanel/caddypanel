@@ -12,6 +12,7 @@ require (
 )
 
 require (
+	github.com/altcha-org/altcha-lib-go v1.0.0 // indirect
 	github.com/bytedance/sonic v1.12.6 // indirect
 	github.com/bytedance/sonic/loader v0.2.1 // indirect
 	github.com/cloudwego/base64x v0.1.4 // indirect

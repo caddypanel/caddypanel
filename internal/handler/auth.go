@@ -12,22 +12,20 @@ import (
 
 // AuthHandler manages authentication endpoints
 type AuthHandler struct {
-	db        *gorm.DB
-	cfg       *config.Config
-	limiter   *auth.RateLimiter
-	challenge *auth.ChallengeStore
+	db      *gorm.DB
+	cfg     *config.Config
+	limiter *auth.RateLimiter
 }
 
 // NewAuthHandler creates a new AuthHandler
-func NewAuthHandler(db *gorm.DB, cfg *config.Config, limiter *auth.RateLimiter, challenge *auth.ChallengeStore) *AuthHandler {
-	return &AuthHandler{db: db, cfg: cfg, limiter: limiter, challenge: challenge}
+func NewAuthHandler(db *gorm.DB, cfg *config.Config, limiter *auth.RateLimiter) *AuthHandler {
+	return &AuthHandler{db: db, cfg: cfg, limiter: limiter}
 }
 
 type loginRequest struct {
-	Username     string `json:"username" binding:"required"`
-	Password     string `json:"password" binding:"required"`
-	ChallengeToken string `json:"challenge_token"`
-	SliderValue  int    `json:"slider_value"`
+	Username string `json:"username" binding:"required"`
+	Password string `json:"password" binding:"required"`
+	Altcha   string `json:"altcha"`
 }
 
 type setupRequest struct {
@@ -35,13 +33,14 @@ type setupRequest struct {
 	Password string `json:"password" binding:"required,min=6"`
 }
 
-// Challenge generates a new slider challenge
-func (h *AuthHandler) Challenge(c *gin.Context) {
-	ch := h.challenge.Generate()
-	c.JSON(http.StatusOK, gin.H{
-		"token":  ch.Token,
-		"target": ch.Target,
-	})
+// AltchaChallenge generates a new ALTCHA PoW challenge
+func (h *AuthHandler) AltchaChallenge(c *gin.Context) {
+	ch, err := auth.GenerateAltchaChallenge(h.cfg.JWTSecret)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to generate challenge"})
+		return
+	}
+	c.JSON(http.StatusOK, ch)
 }
 
 // Setup creates the initial admin user (only works when no users exist)
@@ -94,8 +93,8 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	allowed, waitSec := h.limiter.Check(ip)
 	if !allowed {
 		c.JSON(http.StatusTooManyRequests, gin.H{
-			"error":        "Too many login attempts",
-			"retry_after":  waitSec,
+			"error":       "Too many login attempts",
+			"retry_after": waitSec,
 		})
 		return
 	}
@@ -106,10 +105,16 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
-	// Verify slider challenge
-	if !h.challenge.Verify(req.ChallengeToken, req.SliderValue) {
+	// Verify ALTCHA PoW challenge
+	if req.Altcha == "" {
 		h.limiter.RecordFail(ip)
-		c.JSON(http.StatusBadRequest, gin.H{"error": "验证失败，请重新滑动验证"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "请先完成安全验证"})
+		return
+	}
+	ok, err := auth.VerifyAltchaSolution(req.Altcha, h.cfg.JWTSecret)
+	if err != nil || !ok {
+		h.limiter.RecordFail(ip)
+		c.JSON(http.StatusBadRequest, gin.H{"error": "验证失败，请重新验证"})
 		return
 	}
 

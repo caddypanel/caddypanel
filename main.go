@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bufio"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -12,15 +14,29 @@ import (
 	"github.com/caddypanel/caddypanel/internal/config"
 	"github.com/caddypanel/caddypanel/internal/database"
 	"github.com/caddypanel/caddypanel/internal/handler"
+	"github.com/caddypanel/caddypanel/internal/model"
 	"github.com/caddypanel/caddypanel/internal/service"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	"golang.org/x/crypto/bcrypt"
 )
 
 // Version is set at build time via -ldflags "-X main.Version=x.y.z"
 var Version = "dev"
 
 func main() {
+	// Handle CLI commands before starting the server
+	if len(os.Args) > 1 {
+		switch os.Args[1] {
+		case "--reset-password", "-reset-password", "reset-password":
+			resetPassword()
+			return
+		case "--version", "-v":
+			fmt.Printf("CaddyPanel v%s\n", Version)
+			return
+		}
+	}
+
 	// Load configuration
 	cfg := config.Load()
 
@@ -67,12 +83,11 @@ func main() {
 
 	// Public routes (no auth required)
 	loginLimiter := auth.NewRateLimiter(5, 900) // 5 attempts per 15 minutes
-	challengeStore := auth.NewChallengeStore()
-	authH := handler.NewAuthHandler(db, cfg, loginLimiter, challengeStore)
+	authH := handler.NewAuthHandler(db, cfg, loginLimiter)
 	api.POST("/auth/login", authH.Login)
 	api.POST("/auth/setup", authH.Setup)
 	api.GET("/auth/need-setup", authH.NeedSetup)
-	api.GET("/auth/challenge", authH.Challenge)
+	api.GET("/auth/altcha-challenge", authH.AltchaChallenge)
 
 	// Protected routes (JWT required)
 	protected := api.Group("")
@@ -203,4 +218,68 @@ func setupFrontend(r *gin.Engine) {
 	})
 
 	log.Println("✅ Serving frontend from web/dist")
+}
+
+// resetPassword handles the --reset-password CLI command
+func resetPassword() {
+	fmt.Println("🔐 CaddyPanel — 密码重置工具")
+	fmt.Println("============================")
+
+	// Load config to get DB path
+	cfg := config.Load()
+	db := database.Init(cfg.DBPath)
+
+	reader := bufio.NewReader(os.Stdin)
+
+	// Get username
+	fmt.Print("请输入用户名 (默认 admin): ")
+	username, _ := reader.ReadString('\n')
+	username = strings.TrimSpace(username)
+	if username == "" {
+		username = "admin"
+	}
+
+	// Get password
+	fmt.Print("请输入新密码 (至少8位): ")
+	password, _ := reader.ReadString('\n')
+	password = strings.TrimSpace(password)
+	if len(password) < 8 {
+		fmt.Println("❌ 密码长度不能少于8位")
+		os.Exit(1)
+	}
+
+	// Hash password
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		fmt.Printf("❌ 密码加密失败: %v\n", err)
+		os.Exit(1)
+	}
+
+	// Check if user exists
+	var user model.User
+	result := db.Where("username = ?", username).First(&user)
+	if result.Error != nil {
+		// User doesn't exist — create new
+		user = model.User{
+			Username: username,
+			Password: string(hash),
+			Role:     "admin",
+		}
+		if err := db.Create(&user).Error; err != nil {
+			fmt.Printf("❌ 创建用户失败: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("✅ 已创建管理员账户: %s\n", username)
+	} else {
+		// User exists — update password
+		user.Password = string(hash)
+		if err := db.Save(&user).Error; err != nil {
+			fmt.Printf("❌ 更新密码失败: %v\n", err)
+			os.Exit(1)
+		}
+		fmt.Printf("✅ 已重置用户 %s 的密码\n", username)
+	}
+
+	fmt.Println("\n请重启 CaddyPanel 服务后使用新密码登录:")
+	fmt.Println("  systemctl restart caddypanel")
 }

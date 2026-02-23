@@ -206,13 +206,13 @@ install_deps() {
         debian)
             apt-get update -qq
             DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
-                curl wget ca-certificates tar gzip > /dev/null
+                curl wget ca-certificates tar gzip sqlite3 jq > /dev/null
             ;;
         rhel)
             if command -v dnf &>/dev/null; then
-                dnf install -y -q curl wget ca-certificates tar gzip which
+                dnf install -y -q curl wget ca-certificates tar gzip which sqlite jq
             else
-                yum install -y -q curl wget ca-certificates tar gzip which
+                yum install -y -q curl wget ca-certificates tar gzip which sqlite jq
             fi
             ;;
     esac
@@ -682,13 +682,25 @@ detect_public_ip() {
 
     # Write to SQLite settings table
     local DB_PATH="${DATA_DIR}/caddypanel.db"
+
+    # Wait for CaddyPanel to create the database (up to 10 seconds)
+    local WAIT_COUNT=0
+    while [[ ! -f "$DB_PATH" ]] && [[ $WAIT_COUNT -lt 10 ]]; do
+        sleep 1
+        WAIT_COUNT=$((WAIT_COUNT + 1))
+    done
+
     if command -v sqlite3 &>/dev/null && [[ -f "$DB_PATH" ]]; then
+        # Ensure settings table exists
+        sqlite3 "$DB_PATH" "CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT);" 2>/dev/null || true
         if [[ -n "$PUBLIC_IPV4" ]]; then
             sqlite3 "$DB_PATH" "INSERT OR REPLACE INTO settings (key, value) VALUES ('server_ipv4', '$PUBLIC_IPV4');" 2>/dev/null || true
         fi
         if [[ -n "$PUBLIC_IPV6" ]]; then
             sqlite3 "$DB_PATH" "INSERT OR REPLACE INTO settings (key, value) VALUES ('server_ipv6', '$PUBLIC_IPV6');" 2>/dev/null || true
         fi
+    else
+        warn "无法写入 IP 到数据库（sqlite3 不可用或数据库未创建）"
     fi
 
     if [[ -n "$PUBLIC_IPV4" ]]; then

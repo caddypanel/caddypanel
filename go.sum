@@ -1,3 +1,5 @@
+github.com/altcha-org/altcha-lib-go v1.0.0 h1:7oPti0aUS+YCep8nwt5b9g4jYfCU55ZruWESL8G9K5M=
+github.com/altcha-org/altcha-lib-go v1.0.0/go.mod h1:I8ESLVWR9C58uvGufB/AJDPhaSU4+4Oh3DLpVtgwDAk=
 github.com/bytedance/sonic v1.12.6 h1:/isNmCUF2x3Sh8RAp/4mh4ZGkcFAX/hLrzrK3AvpRzk=
 github.com/bytedance/sonic v1.12.6/go.mod h1:B8Gt/XvtZ3Fqj+iSKMypzymZxw/FVwgIGKzMzT9r/rk=
 github.com/bytedance/sonic/loader v0.1.1/go.mod h1:ncP89zfokxS5LZrJxl5z0UJcsk4M4yY2JpfqGeCtNLU=

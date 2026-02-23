@@ -1,107 +1,9 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router'
 import { Box, Card, Flex, Heading, Text, TextField, Button, Callout } from '@radix-ui/themes'
-import { Zap, AlertCircle, Check, MoveRight } from 'lucide-react'
+import { Zap, AlertCircle } from 'lucide-react'
 import { useAuthStore } from '../stores/auth.js'
-import { authAPI } from '../api/index.js'
-
-// ============ Slider Captcha Component ============
-function SliderCaptcha({ onVerified, onReset }) {
-    const [target, setTarget] = useState(50)
-    const [token, setToken] = useState('')
-    const [value, setValue] = useState(0)
-    const [dragging, setDragging] = useState(false)
-    const [verified, setVerified] = useState(false)
-    const [loading, setLoading] = useState(true)
-    const trackRef = useRef(null)
-    const thumbWidth = 36
-
-    const fetchChallenge = useCallback(async () => {
-        setLoading(true)
-        setVerified(false)
-        setValue(0)
-        onReset?.()
-        try {
-            const res = await authAPI.challenge()
-            setTarget(res.data.target)
-            setToken(res.data.token)
-        } catch {
-            setTarget(50)
-        }
-        setLoading(false)
-    }, [onReset])
-
-    useEffect(() => { fetchChallenge() }, [fetchChallenge])
-
-    // Convert clientX to 0-100 value based on track
-    const getPosition = (clientX) => {
-        if (!trackRef.current) return 0
-        const rect = trackRef.current.getBoundingClientRect()
-        const maxTravel = rect.width - thumbWidth
-        const x = clientX - rect.left - thumbWidth / 2
-        const clamped = Math.max(0, Math.min(x, maxTravel))
-        return Math.round((clamped / maxTravel) * 100)
-    }
-
-    // Convert 0-100 value to pixel left offset for thumb and target
-    const toPixelLeft = (pct) => {
-        if (!trackRef.current) return 0
-        const maxTravel = trackRef.current.getBoundingClientRect().width - thumbWidth
-        return (pct / 100) * maxTravel
-    }
-
-    const handleStart = (clientX) => {
-        if (verified || loading) return
-        setDragging(true)
-    }
-
-    const handleMove = (clientX) => {
-        if (!dragging || verified) return
-        setValue(getPosition(clientX))
-    }
-
-    const handleEnd = () => {
-        if (!dragging || verified) return
-        setDragging(false)
-        const diff = Math.abs(value - target)
-        if (diff <= 5) {
-            setVerified(true)
-            onVerified?.(token, value)
-        } else {
-            // Reset on fail
-            setValue(0)
-            fetchChallenge()
-        }
-    }
-
-    return (
-        <div
-            className={`slider-captcha${verified ? ' success' : ''}`}
-            ref={trackRef}
-            onMouseMove={(e) => handleMove(e.clientX)}
-            onMouseUp={handleEnd}
-            onMouseLeave={() => { if (dragging) { setDragging(false); setValue(0) } }}
-            onTouchMove={(e) => handleMove(e.touches[0].clientX)}
-            onTouchEnd={handleEnd}
-        >
-            <div className="slider-captcha-track">
-                {loading ? '加载中...' : verified ? '✓ 验证通过' : '拖动滑块到标记位置'}
-            </div>
-            {!loading && !verified && (
-                <div className="slider-captcha-target" style={{ left: toPixelLeft(target) + thumbWidth / 2 - 2 }} />
-            )}
-            <div className="slider-captcha-fill" style={{ width: toPixelLeft(value) + thumbWidth / 2 }} />
-            <div
-                className="slider-captcha-thumb"
-                style={{ left: toPixelLeft(value) }}
-                onMouseDown={(e) => { e.preventDefault(); handleStart(e.clientX) }}
-                onTouchStart={(e) => handleStart(e.touches[0].clientX)}
-            >
-                {verified ? <Check size={16} /> : <MoveRight size={16} style={{ color: 'var(--cp-text-muted)' }} />}
-            </div>
-        </div>
-    )
-}
+import 'altcha'
 
 // ============ Login Page ============
 export default function Login() {
@@ -111,21 +13,24 @@ export default function Login() {
     const [password, setPassword] = useState('')
     const [error, setError] = useState('')
     const [submitting, setSubmitting] = useState(false)
-    const [challengeToken, setChallengeToken] = useState('')
-    const [sliderValue, setSliderValue] = useState(0)
-    const [sliderVerified, setSliderVerified] = useState(false)
+    const [altchaPayload, setAltchaPayload] = useState('')
+    const altchaRef = useRef(null)
 
-    const handleVerified = (token, value) => {
-        setChallengeToken(token)
-        setSliderValue(value)
-        setSliderVerified(true)
-    }
+    useEffect(() => {
+        const widget = altchaRef.current
+        if (!widget) return
 
-    const handleSliderReset = () => {
-        setSliderVerified(false)
-        setChallengeToken('')
-        setSliderValue(0)
-    }
+        const handleStateChange = (e) => {
+            if (e.detail?.state === 'verified') {
+                setAltchaPayload(e.detail.payload || '')
+            } else {
+                setAltchaPayload('')
+            }
+        }
+
+        widget.addEventListener('statechange', handleStateChange)
+        return () => widget.removeEventListener('statechange', handleStateChange)
+    }, [needSetup, loading])
 
     const handleSubmit = async (e) => {
         e.preventDefault()
@@ -136,19 +41,22 @@ export default function Login() {
             if (needSetup) {
                 await setup(username, password)
             } else {
-                if (!sliderVerified) {
-                    setError('请先完成滑块验证')
+                if (!altchaPayload) {
+                    setError('请先完成安全验证')
                     setSubmitting(false)
                     return
                 }
-                await login(username, password, challengeToken, sliderValue)
+                await login(username, password, altchaPayload)
             }
             navigate('/', { replace: true })
         } catch (err) {
             const msg = err.response?.data?.error || 'Connection failed'
             setError(msg)
-            // Reset slider on any error
-            handleSliderReset()
+            // Reset altcha widget on error
+            setAltchaPayload('')
+            if (altchaRef.current) {
+                altchaRef.current.reset?.()
+            }
         } finally {
             setSubmitting(false)
         }
@@ -260,13 +168,15 @@ export default function Login() {
                                 />
                             </Flex>
 
-                            {/* Slider captcha (not shown during initial setup) */}
+                            {/* ALTCHA PoW verification (not shown during initial setup) */}
                             {!needSetup && (
                                 <Flex direction="column" gap="1">
                                     <Text size="1" color="gray">安全验证</Text>
-                                    <SliderCaptcha
-                                        onVerified={handleVerified}
-                                        onReset={handleSliderReset}
+                                    <altcha-widget
+                                        ref={altchaRef}
+                                        challengeurl="/api/auth/altcha-challenge"
+                                        hidefooter
+                                        hidelogo
                                     />
                                 </Flex>
                             )}
@@ -274,7 +184,7 @@ export default function Login() {
                             <Button
                                 type="submit"
                                 size="3"
-                                disabled={submitting || !username || !password || (!needSetup && !sliderVerified)}
+                                disabled={submitting || !username || !password || (!needSetup && !altchaPayload)}
                                 style={{ cursor: 'pointer' }}
                             >
                                 {submitting
