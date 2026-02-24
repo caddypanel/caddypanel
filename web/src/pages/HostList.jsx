@@ -456,13 +456,13 @@ function HostFormDialog({ open, onClose, onSaved, host }) {
                                                     variant="soft" color="gray" size="1"
                                                     onClick={() => certFileRef.current?.click()}
                                                 >
-                                                    {certFile ? certFile.name : '选择 .pem/.crt'}
+                                                    {certFile ? certFile.name : t('cert.choose_cert')}
                                                 </Button>
                                                 <Button
                                                     variant="soft" color="gray" size="1"
                                                     onClick={() => keyFileRef.current?.click()}
                                                 >
-                                                    {keyFile ? keyFile.name : '选择 .key'}
+                                                    {keyFile ? keyFile.name : t('cert.choose_key')}
                                                 </Button>
                                                 <input ref={certFileRef} type="file" accept=".pem,.crt,.cer" onChange={(e) => setCertFile(e.target.files?.[0])} style={{ display: 'none' }} />
                                                 <input ref={keyFileRef} type="file" accept=".pem,.key" onChange={(e) => setKeyFile(e.target.files?.[0])} style={{ display: 'none' }} />
