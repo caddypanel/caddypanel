@@ -1,13 +1,15 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate } from 'react-router'
 import { Box, Card, Flex, Heading, Text, TextField, Button, Callout } from '@radix-ui/themes'
-import { Zap, AlertCircle, Check, ShieldCheck, Loader2 } from 'lucide-react'
+import { Zap, AlertCircle, Check, ShieldCheck, Loader2, Languages } from 'lucide-react'
 import { useAuthStore } from '../stores/auth.js'
+import { useTranslation } from 'react-i18next'
 import sha256 from '../utils/sha256.js'
 
 // ============ PoW Captcha Component ============
 // Pure JS implementation — works over HTTP (no Web Crypto needed)
 function PowCaptcha({ onVerified, onReset }) {
+    const { t } = useTranslation()
     const [state, setState] = useState('idle') // idle | solving | verified | error
     const [progress, setProgress] = useState(0)
 
@@ -89,10 +91,10 @@ function PowCaptcha({ onVerified, onReset }) {
                 {state === 'error' && <AlertCircle size={16} />}
             </div>
             <div className="pow-captcha-label">
-                {state === 'idle' && '点击进行安全验证'}
-                {state === 'solving' && `验证中... ${progress}%`}
-                {state === 'verified' && '验证通过'}
-                {state === 'error' && '验证失败，点击重试'}
+                {state === 'idle' && t('login.pow.idle')}
+                {state === 'solving' && t('login.pow.solving', { progress })}
+                {state === 'verified' && t('login.pow.verified')}
+                {state === 'error' && t('login.pow.error')}
             </div>
             <div className="pow-captcha-icon">
                 <ShieldCheck size={20} />
@@ -101,9 +103,42 @@ function PowCaptcha({ onVerified, onReset }) {
     )
 }
 
+// ============ Language Switcher ============
+function LanguageSwitcher() {
+    const { i18n } = useTranslation()
+    const currentLang = i18n.language?.startsWith('zh') ? 'zh' : 'en'
+
+    const toggle = () => {
+        const next = currentLang === 'zh' ? 'en' : 'zh'
+        i18n.changeLanguage(next)
+    }
+
+    return (
+        <button
+            onClick={toggle}
+            style={{
+                background: 'none',
+                border: '1px solid var(--cp-border)',
+                borderRadius: 6,
+                padding: '4px 10px',
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4,
+                fontSize: '0.75rem',
+                color: 'var(--cp-text-muted)',
+            }}
+        >
+            <Languages size={14} />
+            {currentLang === 'zh' ? 'EN' : '中文'}
+        </button>
+    )
+}
+
 // ============ Login Page ============
 export default function Login() {
     const navigate = useNavigate()
+    const { t } = useTranslation()
     const { needSetup, loading, login, setup } = useAuthStore()
     const [username, setUsername] = useState('')
     const [password, setPassword] = useState('')
@@ -130,7 +165,7 @@ export default function Login() {
                 await setup(username, password)
             } else {
                 if (!altchaPayload) {
-                    setError('请先完成安全验证')
+                    setError(t('login.verify_first'))
                     setSubmitting(false)
                     return
                 }
@@ -151,7 +186,7 @@ export default function Login() {
     if (loading) {
         return (
             <Flex align="center" justify="center" style={{ minHeight: '100vh' }}>
-                <Text size="3" color="gray">Loading...</Text>
+                <Text size="3" color="gray">{t('common.loading')}</Text>
             </Flex>
         )
     }
@@ -185,7 +220,7 @@ export default function Login() {
                         CaddyPanel
                     </Heading>
                     <Text size="2" color="gray">
-                        Reverse Proxy Management
+                        {t('login.subtitle')}
                     </Text>
                 </Flex>
 
@@ -201,7 +236,7 @@ export default function Login() {
                     <form onSubmit={handleSubmit}>
                         <Flex direction="column" gap="4">
                             <Heading size="4" align="center">
-                                {needSetup ? 'Create Admin Account' : 'Sign In'}
+                                {needSetup ? t('login.setup_title') : t('login.title')}
                             </Heading>
 
                             {needSetup && (
@@ -210,7 +245,7 @@ export default function Login() {
                                         <AlertCircle size={16} />
                                     </Callout.Icon>
                                     <Callout.Text>
-                                        First time setup — create your admin account.
+                                        {t('login.setup_hint')}
                                     </Callout.Text>
                                 </Callout.Root>
                             )}
@@ -226,7 +261,7 @@ export default function Login() {
 
                             <Flex direction="column" gap="1">
                                 <Text as="label" size="2" weight="medium" htmlFor="username">
-                                    Username
+                                    {t('login.username')}
                                 </Text>
                                 <TextField.Root
                                     id="username"
@@ -241,7 +276,7 @@ export default function Login() {
 
                             <Flex direction="column" gap="1">
                                 <Text as="label" size="2" weight="medium" htmlFor="password">
-                                    Password
+                                    {t('login.password')}
                                 </Text>
                                 <TextField.Root
                                     id="password"
@@ -270,18 +305,21 @@ export default function Login() {
                                 style={{ cursor: 'pointer' }}
                             >
                                 {submitting
-                                    ? 'Please wait...'
+                                    ? t('login.please_wait')
                                     : needSetup
-                                        ? 'Create Account'
-                                        : 'Sign In'}
+                                        ? t('login.create_account')
+                                        : t('login.sign_in')}
                             </Button>
                         </Flex>
                     </form>
                 </Card>
 
-                <Text size="1" color="gray" align="center" mt="4" as="p">
-                    CaddyPanel — Powered by Caddy Server
-                </Text>
+                <Flex justify="center" align="center" gap="3" mt="4">
+                    <Text size="1" color="gray">
+                        {t('login.footer')}
+                    </Text>
+                    <LanguageSwitcher />
+                </Flex>
             </Box>
         </Flex>
     )

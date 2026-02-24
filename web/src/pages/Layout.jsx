@@ -17,21 +17,23 @@ import {
     ChevronDown,
     Sun,
     Moon,
+    Languages,
 } from 'lucide-react'
 import { useAuthStore } from '../stores/auth.js'
 import { useThemeStore } from '../stores/theme.js'
 import { dashboardAPI } from '../api/index.js'
+import { useTranslation } from 'react-i18next'
 
 const navItems = [
-    { to: '/', icon: LayoutDashboard, label: 'Dashboard', end: true },
-    { to: '/hosts', icon: Globe, label: '站点管理' },
-    { to: '/editor', icon: FileCode, label: 'Caddyfile' },
-    { to: '/dns', icon: Shield, label: 'DNS Providers' },
-    { to: '/certificates', icon: ShieldCheck, label: '证书管理' },
-    { to: '/logs', icon: FileText, label: '日志' },
-    { to: '/users', icon: Users, label: '用户管理' },
-    { to: '/audit', icon: ClipboardList, label: '审计日志' },
-    { to: '/settings', icon: Settings, label: '设置' },
+    { to: '/', icon: LayoutDashboard, labelKey: 'nav.dashboard', end: true },
+    { to: '/hosts', icon: Globe, labelKey: 'nav.hosts' },
+    { to: '/editor', icon: FileCode, labelKey: 'nav.editor' },
+    { to: '/dns', icon: Shield, labelKey: 'nav.dns' },
+    { to: '/certificates', icon: ShieldCheck, labelKey: 'nav.certificates' },
+    { to: '/logs', icon: FileText, labelKey: 'nav.logs' },
+    { to: '/users', icon: Users, labelKey: 'nav.users' },
+    { to: '/audit', icon: ClipboardList, labelKey: 'nav.audit' },
+    { to: '/settings', icon: Settings, labelKey: 'nav.settings' },
 ]
 
 function SidebarLink({ to, icon: Icon, label, end }) {
@@ -45,9 +47,17 @@ function SidebarLink({ to, icon: Icon, label, end }) {
 
 export default function Layout() {
     const navigate = useNavigate()
+    const { t, i18n } = useTranslation()
     const { user, logout } = useAuthStore()
     const { theme, toggle: toggleTheme } = useThemeStore()
     const [version, setVersion] = useState('')
+
+    const currentLang = i18n.language?.startsWith('zh') ? 'zh' : 'en'
+
+    const toggleLang = () => {
+        const next = currentLang === 'zh' ? 'en' : 'zh'
+        i18n.changeLanguage(next)
+    }
 
     useEffect(() => {
         dashboardAPI.stats().then(res => {
@@ -99,13 +109,23 @@ export default function Layout() {
                 <Box style={{ flex: 1, padding: '8px 12px' }}>
                     <Flex direction="column" gap="1" mt="2">
                         {navItems.map((item) => (
-                            <SidebarLink key={item.to} {...item} />
+                            <SidebarLink key={item.to} to={item.to} icon={item.icon} label={t(item.labelKey)} end={item.end} />
                         ))}
                     </Flex>
                 </Box>
 
-                {/* Bottom: theme toggle + user menu */}
+                {/* Bottom: lang toggle + theme toggle + user menu */}
                 <Box p="3" style={{ borderTop: '1px solid var(--cp-border)' }}>
+                    {/* Language toggle */}
+                    <button
+                        onClick={toggleLang}
+                        className="sidebar-btn"
+                        style={{ marginBottom: 4 }}
+                    >
+                        <Languages size={16} />
+                        <span>{currentLang === 'zh' ? 'EN' : '中文'}</span>
+                    </button>
+
                     {/* Theme toggle */}
                     <button
                         onClick={toggleTheme}
@@ -113,7 +133,7 @@ export default function Layout() {
                         style={{ marginBottom: 4 }}
                     >
                         {theme === 'dark' ? <Sun size={16} /> : <Moon size={16} />}
-                        <span>{theme === 'dark' ? '浅色模式' : '深色模式'}</span>
+                        <span>{theme === 'dark' ? t('nav.light_mode') : t('nav.dark_mode')}</span>
                     </button>
 
                     {/* User menu */}
@@ -130,7 +150,7 @@ export default function Layout() {
                         <DropdownMenu.Content side="top" align="start">
                             <DropdownMenu.Item color="red" onClick={handleLogout}>
                                 <LogOut size={14} />
-                                Sign Out
+                                {t('nav.sign_out')}
                             </DropdownMenu.Item>
                         </DropdownMenu.Content>
                     </DropdownMenu.Root>

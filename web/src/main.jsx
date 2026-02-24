@@ -2,6 +2,7 @@ import React from 'react'
 import { createRoot } from 'react-dom/client'
 import { Theme } from '@radix-ui/themes'
 import App from './App.jsx'
+import './i18n.js'
 import './index.css'
 import { useThemeStore } from './stores/theme.js'
 

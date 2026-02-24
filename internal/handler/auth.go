@@ -108,13 +108,13 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	// Verify ALTCHA PoW challenge
 	if req.Altcha == "" {
 		h.limiter.RecordFail(ip)
-		c.JSON(http.StatusBadRequest, gin.H{"error": "请先完成安全验证"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Please complete security verification first"})
 		return
 	}
 	ok, err := auth.VerifyAltchaSolution(req.Altcha, h.cfg.JWTSecret)
 	if err != nil || !ok {
 		h.limiter.RecordFail(ip)
-		c.JSON(http.StatusBadRequest, gin.H{"error": "验证失败，请重新验证"})
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Verification failed, please try again"})
 		return
 	}
 
