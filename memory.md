@@ -45,6 +45,8 @@ Go(Gin) + React19(Vite7) 单二进制面板，管理 Caddy 反代。DB → `Rend
 2026-02-23 v0.4.2     修复 Settings 页面组件引入缺失及字体加载语法错误
 2026-02-23 v0.4.3     修复登录页面滑块验证码坐标系计算不同步导致的验证失败；新增脚本 GLIBC 版本检查，提前拦截暂不支持的低版本 Linux 预编译下载
 2026-02-23 v0.4.4     进一步加固和修复 install.sh 中关于 GLIBC 版本检测由于环境差异导致输出拼接所产生的解析 bug
+2026-02-23 v0.5.0     滑块验证码 → Altcha PoW 替换；新增 altcha.go；移除 ChallengeStore
+2026-02-23 v0.5.1     修复 Altcha Widget 在 HTTP 下 Web Crypto 不可用；用纯 JS SHA-256 替代 Widget
 ```
 
 ## ⚠️ 重要约定（必须遵守）
@@ -95,8 +97,9 @@ grep -rn "搜索词" --include='*.go' --include='*.js' --include='*.jsx' --inclu
 
 - [ ] Dashboard 缺少流量统计（需 Caddy log 解析）
 - [ ] 缺少插件系统
-- [ ] 前端 JS bundle 878KB 较大，可做 code-split
-- [ ] `package-lock.json` 在改 `package.json` 版本后需 `npm install` 同步
+- [ ] 前端 JS bundle ~895KB，可做 code-split
+- [x] ~~滑块验证码经常失败~~ → 已替换为 Altcha PoW (v0.5.0)
+- [x] ~~Altcha Widget 在 HTTP 下不工作~~ → 已用纯 JS SHA-256 修复 (v0.5.1)
 
 ## 💬 用户偏好
 

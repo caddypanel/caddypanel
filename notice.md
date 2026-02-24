@@ -77,6 +77,20 @@ Enabled *bool `gorm:"default:true"`
 
 ---
 
+## 🔐 Web Crypto 的安全上下文陷阱 (v0.5.0 → v0.5.1)
+
+**问题**: 将滑块验证替换为 Altcha PoW 后，用户报告"验证了5分钟还在验证"，浏览器控制台报大量 `Web Crypto is not available. Secure context is required` 错误。
+
+**根因**: Altcha Widget 内部使用 `crypto.subtle`（Web Crypto API）来做 SHA-256 哈希。但 Web Crypto **只在安全上下文中可用**——即 HTTPS、localhost 或 `file://`。CaddyPanel 通常通过 `http://server-ip:2019` 访问，属于**非安全上下文**，因此 Web Crypto 不可用。
+
+**AI 的失误**: 在评估兼容性时，AI 关注了 Go 依赖和浏览器兼容性，但**忽略了 HTTP vs HTTPS 这个运行环境差异**。本地开发（localhost）能正常工作，但部署到远程服务器后立即失败。
+
+**解决方案**: 移除 Altcha Widget Web Component，改用自定义 `PowCaptcha` React 组件 + 纯 JavaScript SHA-256 实现（`web/src/utils/sha256.js`）。这样无论 HTTP 还是 HTTPS 都能正常工作。后端 Altcha Go 库不变，前端生成相同格式的 base64 payload。
+
+**教训**: **评估第三方库兼容性时，不仅要看 API 和浏览器版本，还要考虑运行环境的安全上下文约束**（HTTP/HTTPS）。尤其是面板类工具，用户经常在没有 SSL 的情况下直接通过 IP 访问。
+
+---
+
 ## 💡 经验总结
 
 1. **版本号管理**: 永远使用 Single Source of Truth，避免多处硬编码
@@ -84,3 +98,4 @@ Enabled *bool `gorm:"default:true"`
 3. **Bool 指针**: Go + GORM 中布尔字段必须用 `*bool` 避免零值陷阱
 4. **渐进式验证**: 每完成一个批次就 `go build` + `npm run build` 验证，不要累积到最后
 5. **文档同步**: 功能开发后及时更新 agents.md / stack.md / README.md，避免文档腐化
+6. **安全上下文**: 面板类工具常通过 HTTP 访问，避免依赖需要 HTTPS 的 Web API（如 `crypto.subtle`）

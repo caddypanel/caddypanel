@@ -6,12 +6,28 @@
 
 ---
 
+## [0.5.1] - 2026-02-23
+
+### Fixed
+- 🐛 修复 Altcha Widget 在 HTTP（非 HTTPS）环境下因 Web Crypto API 不可用导致验证永远无法完成的问题
+- 🐛 修复安全验证组件文字在浅色主题下看不清的问题
+
+### Changed
+- 🔄 使用纯 JavaScript SHA-256 实现替代 Altcha Widget Web Component，移除 `altcha` npm 依赖
+- 🔄 自定义 `PowCaptcha` 组件：复选框式 UI、进度百分比显示、主题自适应
+- 📦 JS bundle 从 960KB 降至 895KB
+
+---
+
 ## [0.5.0] - 2026-02-23
 
 ### Added
-- ✨ 安全增强：使用 Altcha Proof-of-Work (PoW) 机制替换原有的滑块验证码，大幅提升成功率并降低用户操作负担，全过程零额外 Go 模块依赖。
+- ✨ 安全增强：使用 Altcha Proof-of-Work (PoW) 机制替换原有的滑块验证码，大幅提升验证成功率
+- ✨ 后端新增 `internal/auth/altcha.go` 封装 PoW 挑战生成与验证（基于 `altcha-lib-go`）
 
----
+### Removed
+- 🗑️ 移除滑块验证码组件 `SliderCaptcha` 及全部相关 CSS（~180 行）
+- 🗑️ 移除后端 `ChallengeStore` 滑块验证逻辑（~86 行）
 
 ## [0.4.4] - 2026-02-23
 

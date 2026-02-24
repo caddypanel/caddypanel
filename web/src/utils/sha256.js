@@ -29,7 +29,7 @@ function sha256(message) {
 
     // Pre-processing: padding
     const bitLen = msgLen * 8
-    const padLen = ((msgLen + 8) % 64 === 0) ? 0 : (64 - ((msgLen + 8) % 64))
+    const padLen = (64 - ((msgLen + 9) % 64)) % 64
     const totalLen = msgLen + 1 + padLen + 8
     const padded = new Uint8Array(totalLen)
     padded.set(msgBytes)
